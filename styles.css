@@ -5646,3 +5646,279 @@ input.browser-search-input {
     color: var(--text-primary);
 }
 
+/* ── GIF Maker ──────────────────────────────────────────────────── */
+
+.gif-maker-content {
+    max-width: 880px;
+    width: 95%;
+    padding: 1.5rem 1.5rem 1.25rem;
+}
+
+#gif-maker-title {
+    margin: 0 0 1rem;
+    font-size: 1.25rem;
+}
+
+.modal-close-btn {
+    position: absolute;
+    top: 0.85rem;
+    right: 1rem;
+    background: transparent;
+    border: none;
+    color: var(--text-faint);
+    font-size: 1.15rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-xs);
+    line-height: 1;
+}
+.modal-close-btn:hover { color: var(--text-primary); background: var(--surface-btn); }
+
+.gif-maker-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    align-items: start;
+}
+@media (max-width: 720px) {
+    .gif-maker-body { grid-template-columns: 1fr; }
+}
+
+.gif-maker-label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    margin: 0.85rem 0 0.4rem;
+    font-weight: 600;
+}
+.gif-maker-inputs > .gif-maker-label:first-child { margin-top: 0; }
+
+/* ── Inputs column ── */
+
+.gif-pgn-input {
+    width: 100%;
+    min-height: 9rem;
+    box-sizing: border-box;
+    background: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xs);
+    padding: 0.55rem 0.7rem;
+    font-family: ui-monospace, 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    resize: vertical;
+}
+.gif-pgn-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.gif-pgn-status {
+    margin-top: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--text-subtle);
+    min-height: 1.1em;
+}
+.gif-pgn-status.ok    { color: var(--status-success); }
+.gif-pgn-status.error { color: var(--status-error); }
+
+.gif-select {
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    background: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xs);
+    font: inherit;
+    font-size: 0.85rem;
+}
+
+.gif-board-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.6rem;
+}
+.gif-board-presets .preset-chip {
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-color);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+.gif-board-presets .preset-chip:hover { background: var(--surface-subtle); }
+.gif-board-presets .preset-chip.active {
+    background: rgb(from var(--accent) r g b / 0.18);
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.gif-board-customs {
+    display: flex;
+    gap: 0.6rem;
+}
+.gif-color-pair {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--text-faint);
+}
+.gif-color-pair input[type="color"] {
+    width: 32px;
+    height: 28px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xs);
+    padding: 0;
+    background: none;
+    cursor: pointer;
+}
+.gif-color-pair input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.gif-color-pair input[type="color"]::-webkit-color-swatch         { border: 0; border-radius: 3px; }
+
+/* ── Output column ── */
+
+.gif-stage {
+    width: 100%;
+    max-width: 360px;
+    margin: 0 auto;
+    padding: 0.4rem;
+}
+.gif-preview-pane {
+    display: flex;
+    flex-direction: column;
+}
+.gif-preview {
+    aspect-ratio: 1;
+    width: 100%;
+    background: var(--surface);
+    border-radius: var(--radius-xs);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-faint);
+    font-size: 0.78rem;
+    overflow: hidden;
+}
+.gif-preview:empty::before { content: 'preview'; }
+
+.gif-scrubber-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0.75rem 0;
+    max-width: 360px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.gif-scrubber {
+    flex: 1;
+    accent-color: var(--accent);
+}
+.gif-frame-counter {
+    font-family: ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.gif-behavior {
+    padding: 0.75rem 0.9rem;
+    margin-top: 0.75rem;
+}
+.gif-behavior-row + .gif-behavior-row { margin-top: 0.75rem; }
+.gif-behavior .gif-maker-label { margin-top: 0; }
+
+.gif-timing-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+.gif-timing-options label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+}
+.gif-timing-options input[type="radio"] { accent-color: var(--accent); }
+
+.gif-custom-ms {
+    margin-top: 0.5rem;
+    width: 9rem;
+    background: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-xs);
+    padding: 0.3rem 0.5rem;
+    font: inherit;
+    font-size: 0.82rem;
+}
+
+.gif-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-right: 1.25rem;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+.gif-checkbox input[type="checkbox"] { accent-color: var(--accent); }
+
+.gif-action-row {
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.gif-progress {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+.gif-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--surface);
+    border-radius: 3px;
+    overflow: hidden;
+}
+.gif-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.15s ease;
+}
+.gif-progress-text {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.gif-result-img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: contain;
+    margin: 0 auto 0.75rem;
+    border-radius: var(--radius-xs);
+    background: var(--surface);
+}
+.gif-result-actions {
+    display: flex;
+    gap: 0.6rem;
+    justify-content: center;
+}
+

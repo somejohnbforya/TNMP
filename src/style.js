@@ -11,7 +11,7 @@ import { setBoardCoordinates as setCoordinates } from './game-panel.js';
 
 // --- Piece themes ---
 
-const PIECE_THEMES = [
+export const PIECE_THEMES = [
     { id: 'default', name: 'Default' },
     { id: 'cburnett', name: 'Cburnett' },
     { id: 'merida', name: 'Merida' },
@@ -51,7 +51,7 @@ const PIECE_COLORS = { w: 'white', b: 'black' };
 
 // --- Board color presets ---
 
-const BOARD_PRESETS = [
+export const BOARD_PRESETS = [
     { id: 'ice', name: 'Ice', light: '#dee3e6', dark: '#8ca2ad' },
     { id: 'brown', name: 'Brown', light: '#f0d9b5', dark: '#b58863' },
     { id: 'green', name: 'Green', light: '#ffffdd', dark: '#86a666' },
@@ -290,7 +290,7 @@ function closeAllDropdowns() {
     document.querySelectorAll('.style-dropdown.open').forEach((d) => d.classList.remove('open', 'dropup'));
 }
 
-function initDropdown(id, onSelect) {
+export function initDropdown(id, onSelect) {
     const el = document.getElementById(id);
     const trigger = el.querySelector('.style-dropdown-trigger');
     const menu = el.querySelector('.style-dropdown-menu');
@@ -320,13 +320,13 @@ function initDropdown(id, onSelect) {
 
 // --- Render helpers ---
 
-function piecePreviewHtml(themeId) {
+export function piecePreviewHtml(themeId) {
     return WHITE_PIECES.map(
         (p) => `<img src="${pieceSrc(themeId, p)}" alt="" class="style-piece-img" draggable="false">`,
     ).join('');
 }
 
-function boardSwatchHtml(light, dark, pattern) {
+export function boardSwatchHtml(light, dark, pattern) {
     const darkBg = darkSquareCss(light, dark, pattern);
     return `<span class="style-board-swatch">
         <span style="background:${light}"></span><span style="background:${darkBg}"></span>
@@ -340,7 +340,7 @@ function schemeSwatchHtml(scheme) {
     </span>`;
 }
 
-function buildPieceMenu(currentId) {
+export function buildPieceMenu(currentId) {
     return PIECE_THEMES.map(
         (t) =>
             `<div class="style-dropdown-item${t.id === currentId ? ' active' : ''}" data-value="${t.id}">
@@ -350,7 +350,7 @@ function buildPieceMenu(currentId) {
     ).join('');
 }
 
-function buildBoardMenu(currentLight, currentDark, currentPattern) {
+export function buildBoardMenu(currentLight, currentDark, currentPattern) {
     return BOARD_PRESETS.map((p) => {
         const active =
             p.light === currentLight && p.dark === currentDark && (p.pattern || '') === (currentPattern || '');

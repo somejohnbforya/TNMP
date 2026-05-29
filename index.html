@@ -224,6 +224,117 @@
 
     <div id="profile-mount" class="tnmp"></div>
 
+    <!-- GIF Maker Modal -->
+    <div id="gif-maker-modal" class="modal hidden" role="dialog" aria-labelledby="gif-maker-title" aria-modal="true">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-content-wide gif-maker-content">
+            <button data-close-modal class="modal-close-btn" aria-label="Close">✕</button>
+            <h2 id="gif-maker-title">GIF Maker</h2>
+
+            <div class="gif-maker-body">
+
+                <!-- ─── LEFT: inputs + style + behavior ─── -->
+                <div class="gif-maker-inputs">
+
+                    <label class="gif-maker-label" for="gif-pgn-input">PGN</label>
+                    <textarea
+                        id="gif-pgn-input"
+                        class="gif-pgn-input"
+                        placeholder="Paste or drop a PGN here..."
+                        spellcheck="false"
+                        autocomplete="off"></textarea>
+                    <div id="gif-pgn-status" class="gif-pgn-status"></div>
+
+                    <label class="gif-maker-label">Pieces</label>
+                    <div id="gif-pieces-dropdown" class="style-dropdown">
+                        <button type="button" class="style-dropdown-trigger"></button>
+                        <div class="style-dropdown-menu"></div>
+                    </div>
+
+                    <label class="gif-maker-label">Board</label>
+                    <div class="style-board-row">
+                        <div id="gif-board-dropdown" class="style-dropdown">
+                            <button type="button" class="style-dropdown-trigger"></button>
+                            <div class="style-dropdown-menu"></div>
+                        </div>
+                        <input type="color" id="gif-board-light" class="color-picker" title="Light squares" value="#dee3e6">
+                        <input type="color" id="gif-board-dark" class="color-picker" title="Dark squares" value="#8ca2ad">
+                    </div>
+
+                    <div class="gif-behavior raised-panel">
+                        <div class="gif-behavior-row">
+                            <label class="gif-maker-label">Time per move</label>
+                            <div class="gif-timing-options" id="gif-timing-options">
+                                <label><input type="radio" name="gif-timing" value="fast"> Fast</label>
+                                <label><input type="radio" name="gif-timing" value="medium" checked> Medium</label>
+                                <label><input type="radio" name="gif-timing" value="slow"> Slow</label>
+                                <label><input type="radio" name="gif-timing" value="custom"> Custom</label>
+                            </div>
+                            <input
+                                type="number"
+                                id="gif-timing-custom-ms"
+                                class="gif-custom-ms hidden"
+                                min="50" max="5000" step="50" value="600"
+                                aria-label="Custom milliseconds per move">
+                        </div>
+
+                        <div class="gif-behavior-row">
+                            <label class="gif-checkbox">
+                                <input type="checkbox" id="gif-flip-board">
+                                Flip board (black perspective)
+                            </label>
+                            <label class="gif-checkbox">
+                                <input type="checkbox" id="gif-final-hold">
+                                Hold final frame
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ─── RIGHT: stage (preview ↔ result) + action ─── -->
+                <div class="gif-maker-output">
+
+                    <div class="gif-stage raised-panel">
+                        <!-- Live preview (default) -->
+                        <div id="gif-preview-pane" class="gif-preview-pane">
+                            <div id="gif-preview" class="gif-preview"></div>
+                            <div class="gif-scrubber-wrap">
+                                <input
+                                    type="range"
+                                    id="gif-scrubber"
+                                    class="gif-scrubber"
+                                    min="0" max="0" value="0" step="1"
+                                    aria-label="Preview frame">
+                                <div class="gif-frame-counter">
+                                    <span id="gif-frame-current">0</span> / <span id="gif-frame-total">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Result (shown after Generate) -->
+                        <div id="gif-result" class="gif-result hidden">
+                            <img id="gif-result-img" class="gif-result-img" alt="Generated GIF preview">
+                            <div class="gif-result-actions">
+                                <button id="gif-download-btn" class="modal-btn modal-btn-primary">Download</button>
+                                <button id="gif-regen-btn" class="modal-btn">Regenerate</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="gif-action-row">
+                        <button id="gif-generate-btn" class="modal-btn modal-btn-primary" disabled>
+                            Generate GIF
+                        </button>
+                        <div id="gif-progress" class="gif-progress hidden">
+                            <div class="gif-progress-bar"><div id="gif-progress-fill" class="gif-progress-fill"></div></div>
+                            <div id="gif-progress-text" class="gif-progress-text">Encoding…</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script type="module" src="./src/app.js"></script>
 </body>
 </html>
