@@ -12,12 +12,13 @@ export function corsHeaders(env, request) {
     };
 }
 
-export function corsResponse(data, status, env, request) {
+export function corsResponse(data, status, env, request, extraHeaders = {}) {
     return new Response(JSON.stringify(data), {
         status,
         headers: {
             'Content-Type': 'application/json',
             ...corsHeaders(env, request),
+            ...extraHeaders,
         },
     });
 }

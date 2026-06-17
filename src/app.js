@@ -280,7 +280,7 @@ async function checkPairings() {
     // Fetch fresh state from server
     let serverState = null;
     try {
-        const data = await (await fetch(`${WORKER_URL}/tournament-state`)).json();
+        const data = await (await fetch(`${WORKER_URL}/tournament-state`, { cache: 'no-store' })).json();
         if (data.state) {
             serverState = data;
             localStorage.setItem('lastTournamentState', JSON.stringify(data));
@@ -302,7 +302,7 @@ async function checkPairings() {
                 ? `player_norm=${encodeURIComponent(CONFIG.playerNorm)}`
                 : `player=${encodeURIComponent(CONFIG.playerName)}`;
             const qUrl = `${WORKER_URL}/query?${playerParam}&tournament=${encodeURIComponent(serverState.tournamentSlug)}`;
-            const qData = await (await fetch(qUrl)).json();
+            const qData = await (await fetch(qUrl, { cache: 'no-store' })).json();
             if (qData.playerNorm) CONFIG.playerNorm = qData.playerNorm;
             trackerRounds = buildTrackerRounds(qData.games || [], qData.byes || [], qData.playerNorm);
             localStorage.setItem('lastTrackerRounds', JSON.stringify(trackerRounds));

@@ -359,8 +359,12 @@ export async function handleTournamentHtml(request, env) {
 }
 
 export async function handleTournamentState(request, env) {
+    // Live status — must never be cached by the browser/CDN, or a stale round
+    // can stick on screen after the real state has moved on.
+    const noStore = { 'Cache-Control': 'no-store' };
+
     const cachedAppState = await env.SUBSCRIBERS.get('cache:appState', 'json');
-    if (cachedAppState) return corsResponse(cachedAppState, 200, env, request);
+    if (cachedAppState) return corsResponse(cachedAppState, 200, env, request, noStore);
 
     const [cached, meta] = await Promise.all([
         env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
@@ -373,7 +377,7 @@ export async function handleTournamentState(request, env) {
         tournamentName: appState.tournamentName, tournamentUrl: appState.tournamentUrl,
         tournamentSlug: appState.tournamentSlug, roundDates: appState.roundDates,
         fetchedAt: cached?.fetchedAt || null,
-    }, 200, env, request);
+    }, 200, env, request, noStore);
 }
 
 export async function handleStandings(request, env) {
