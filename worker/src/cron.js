@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
-import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection } from './helpers.js';
-import { resolveTournament, computeAppState, discoverUpcomingTournaments, displayTournament } from './tournament.js';
+import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection, pacificNow } from './helpers.js';
+import { resolveTournament, computeAppState, discoverUpcomingTournaments } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications, retryPendingNotifications } from './push.js';
 import {
     parseTournamentPage, parseStandings,
@@ -18,10 +18,7 @@ export class TournamentCron extends DurableObject {
 }
 
 export async function handleScheduled(env, { force = false } = {}) {
-    const pacific = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
-    const pDay = pacific.getDay();
-    const pHour = pacific.getHours();
-    const pMinute = pacific.getMinutes();
+    const { day: pDay, hour: pHour, minute: pMinute } = pacificNow();
 
     const isPairingsWindow = pDay === 1 && pHour >= 19;
     const isResultsWindow = pDay === 2 && pHour >= 19;
@@ -107,11 +104,10 @@ async function runCronLogic(env) {
 
         // Recompute time-dependent app state even when HTML hasn't changed
         const appState = computeAppState(cached, tournament);
-        const display = displayTournament(tournament);
         await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
             state: appState.state, round: appState.round,
-            tournamentName: display.name, tournamentUrl: display.url,
-            tournamentSlug: display.slug, roundDates: display.roundDates,
+            tournamentName: appState.tournamentName, tournamentUrl: appState.tournamentUrl,
+            tournamentSlug: appState.tournamentSlug, roundDates: appState.roundDates,
             fetchedAt: new Date().toISOString(),
         }));
         await updateLastCheck(env, { pairingsFound: hasPairingsFlag });
@@ -269,13 +265,12 @@ async function runCronLogic(env) {
     const appState = computeAppState(cached, tournament);
     t.computeAppState = performance.now() - t0;
     const slug = tournament.slug || slugifyTournament(tournament.name);
-    const display = displayTournament(tournament);
 
     t0 = performance.now();
     await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
         state: appState.state, round: appState.round,
-        tournamentName: display.name, tournamentUrl: display.url,
-        tournamentSlug: display.slug, roundDates: display.roundDates,
+        tournamentName: appState.tournamentName, tournamentUrl: appState.tournamentUrl,
+        tournamentSlug: appState.tournamentSlug, roundDates: appState.roundDates,
         fetchedAt: new Date().toISOString(),
     }));
     console.log(`Cached appState in KV.`);

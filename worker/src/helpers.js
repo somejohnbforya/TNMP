@@ -86,6 +86,26 @@ export function pacificDatetime(year, month, day, time = '00:00:00') {
     return `${year}-${pad2(month)}-${pad2(day)}T${time}${pacificOffset(year, month, day)}`;
 }
 
+// Single source for "now" in US Pacific terms. The toLocaleString round-trip
+// yields a Date whose get*() fields read as Pacific wall-clock; `ms` stays the
+// true UTC instant and `dateStr` is the Pacific calendar date (en-CA → ISO).
+// Both the worker's time-state logic and the cron scheduler read from here, so
+// there's one audited place where "what time is it in SF" is computed.
+export function pacificNow() {
+    const now = new Date();
+    const wall = new Date(now.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' }));
+    const hour = wall.getHours();
+    const minute = wall.getMinutes();
+    return {
+        day: wall.getDay(),
+        hour,
+        minute,
+        minutes: hour * 60 + minute,
+        dateStr: now.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' }),
+        ms: now.getTime(),
+    };
+}
+
 export function slugifyTournament(name) {
     return name
         .toLowerCase()

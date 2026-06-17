@@ -4,7 +4,7 @@
 // future pivot doesn't fire the same regression class.
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
-    getTimeState, computeAppState, displayTournament,
+    getTimeState, computeAppState,
     selectNotificationKind, KIND_CONSUMES,
 } from './index.js';
 import { pacificOffset } from './helpers.js';
@@ -75,59 +75,66 @@ const meta = (current, next) => ({
     } : null,
 });
 
-// ─── displayTournament — bug #1 (countdown flip) ───────────────────────
+// ─── subject selection — bug #1 (countdown flip) ───────────────────────
+// displayTournament was folded into computeAppState's chooseSubject; the chosen
+// subject is now observed through the response's tournamentSlug.
 
-describe('displayTournament', () => {
+describe('subject selection (via computeAppState)', () => {
+    const slugAt = (current, next) => computeAppState(null, meta(current, next)).tournamentSlug;
+
     it('shows current during pre-R1 day (current is the imminent tournament)', () => {
         mockPacificTime(2026, 5, 5, 12, 0); // R1 day, before kickoff
-        const display = displayTournament(meta(SILMAN, SUMMER));
-        expect(display.slug).toBe(SILMAN.slug);
+        expect(slugAt(SILMAN, SUMMER)).toBe(SILMAN.slug);
     });
 
     it('shows current during off_season_r1 (R1 day, just before kickoff)', () => {
-        // The May 5/6 bug: at 17:00 PT on R1 day, displayTournament had been
-        // returning Summer, leading to the countdown leaping forward 63 days.
+        // The May 5/6 bug: at 17:00 PT on R1 day, the subject had been flipping
+        // to Summer, leading to the countdown leaping forward 63 days.
         mockPacificTime(2026, 5, 5, 17, 0);
-        const display = displayTournament(meta(SILMAN, SUMMER));
-        expect(display.slug).toBe(SILMAN.slug);
+        expect(slugAt(SILMAN, SUMMER)).toBe(SILMAN.slug);
     });
 
     it('shows current during in_progress (R1 in play)', () => {
         mockPacificTime(2026, 5, 5, 19, 30);
-        const display = displayTournament(meta(SILMAN, SUMMER));
-        expect(display.slug).toBe(SILMAN.slug);
+        expect(slugAt(SILMAN, SUMMER)).toBe(SILMAN.slug);
     });
 
     it('shows current during the results window between rounds', () => {
         mockPacificTime(2026, 5, 8, 12, 0); // Friday between R1 and R2
-        const display = displayTournament(meta(SILMAN, SUMMER));
-        expect(display.slug).toBe(SILMAN.slug);
+        expect(slugAt(SILMAN, SUMMER)).toBe(SILMAN.slug);
     });
 
-    it('switches to next once current is fully complete', () => {
-        mockPacificTime(2026, 6, 25, 12, 0); // After Silman's last round (Jun 16)
-        const display = displayTournament(meta(SILMAN, SUMMER));
-        expect(display.slug).toBe(SUMMER.slug);
+    it('stays on current through the post-final dead window (Option A)', () => {
+        // Jun 25: past Silman's last round (Jun 16) but >7 days before Summer's
+        // R1 (Jul 7). The old code swapped to Summer the moment the final round
+        // started; we now keep the finished tournament as the subject ("final
+        // standings") until next's countdown window opens.
+        mockPacificTime(2026, 6, 25, 12, 0);
+        expect(slugAt(SILMAN, SUMMER)).toBe(SILMAN.slug);
+    });
+
+    it("switches to next once inside next's 7-day countdown window", () => {
+        mockPacificTime(2026, 7, 2, 12, 0); // 5 days before Summer's Jul 7 R1
+        expect(slugAt(SILMAN, SUMMER)).toBe(SUMMER.slug);
     });
 
     it('falls back to current when next has no roundDates', () => {
         mockPacificTime(2026, 6, 25, 12, 0);
         const incompleteNext = { ...SUMMER, roundDates: [] };
-        const display = displayTournament(meta(SILMAN, incompleteNext));
-        expect(display.slug).toBe(SILMAN.slug);
+        expect(slugAt(SILMAN, incompleteNext)).toBe(SILMAN.slug);
     });
 
     it('falls back to current when next is null', () => {
         mockPacificTime(2026, 6, 25, 12, 0);
-        const display = displayTournament(meta(SILMAN, null));
-        expect(display.slug).toBe(SILMAN.slug);
+        expect(slugAt(SILMAN, null)).toBe(SILMAN.slug);
     });
 
     it('returns sane defaults when tournament is null', () => {
-        const display = displayTournament(null);
-        expect(display.name).toBe('Tuesday Night Marathon');
-        expect(display.slug).toBeNull();
-        expect(display.roundDates).toEqual([]);
+        mockPacificTime(2026, 6, 25, 12, 0);
+        const result = computeAppState(null, null);
+        expect(result.tournamentName).toBe('Tuesday Night Marathon');
+        expect(result.tournamentSlug).toBeNull();
+        expect(result.roundDates).toEqual([]);
     });
 });
 
@@ -185,18 +192,75 @@ describe('computeAppState — slug + round always describe one tournament', () =
         expect(result.tournamentName).toBe(SILMAN.name);
     });
 
-    it('cached.round from current HTML is IGNORED when display swapped to next', () => {
-        // Past Silman's last round, display=Summer. cached.round=7 (Silman's
-        // last) must not leak into the response — round should derive from
-        // Summer's roundDates (R1 default = 1).
+    it('final-round evening: in_progress on CURRENT round 7, NOT next round 1', () => {
+        // The exact bug shipped Jun 16: the subject swapped to Summer at 6:30pm
+        // while the phase still read round_in_progress off Silman, yielding
+        // "Round 1 [Summer] is being played right now!". Now both come from
+        // Silman: "Round 7 is being played right now!".
+        mockPacificTime(2026, 6, 16, 20, 0); // Silman's final round (Jun 16), 8pm
+        const result = computeAppState(
+            { html: '<html/>', round: 7 }, // pairings parsed, results not yet in
+            meta(SILMAN, SUMMER),
+        );
+        expect(result.state).toBe('in_progress');
+        expect(result.round).toBe(7);
+        expect(result.tournamentName).toBe(SILMAN.name);
+        expect(result.tournamentSlug).toBe(SILMAN.slug);
+    });
+
+    it('dead window after final round: stays on current, reports it complete', () => {
+        // Jun 25: still Silman (>7d before Summer). cached.round 7 IS honored
+        // because the subject is current — and round 7 == totalRounds → "complete".
         mockPacificTime(2026, 6, 25, 12, 0);
         const result = computeAppState(
             { html: '<html/>', round: 7 },
             meta(SILMAN, SUMMER),
         );
+        expect(result.state).toBe('results');
+        expect(result.tournamentName).toBe(SILMAN.name);
+        expect(result.round).toBe(7);
+        expect(result.info).toContain('complete');
+    });
+
+    it('cached.round (current HTML) is ignored once the subject is next', () => {
+        // Inside Summer's 7-day countdown window: subject = Summer, so Silman's
+        // parsed round 7 must not leak — round derives from Summer (R1 future → 1).
+        mockPacificTime(2026, 7, 2, 12, 0);
+        const result = computeAppState(
+            { html: '<html/>', round: 7 },
+            meta(SILMAN, SUMMER),
+        );
+        expect(result.state).toBe('off_season');
         expect(result.tournamentName).toBe(SUMMER.name);
         expect(result.round).toBe(1);
     });
+});
+
+// ─── full Silman → Summer cycle — (state, round, slug) stay coherent ────
+// One row per seam across the whole pivot. The invariant under test: state,
+// round, and tournamentSlug always describe ONE tournament. resolveTournament
+// flips `current` at the date level once Summer's R1 date arrives, so rows on
+// or after Jul 7 pass meta(SUMMER, …) to mirror production.
+
+describe('full Silman → Summer cycle coherence', () => {
+    const cases = [
+        // [desc, [Y, M, D, h, m], cached, current, next, state, round, slug]
+        ['R7 final-round evening', [2026, 6, 16, 20, 0], { html: '<html/>', round: 7 }, SILMAN, SUMMER, 'in_progress', 7, SILMAN.slug],
+        ['dead window — final standings', [2026, 6, 20, 12, 0], { html: '<html/>', round: 7 }, SILMAN, SUMMER, 'results', 7, SILMAN.slug],
+        ['countdown to next', [2026, 7, 2, 12, 0], null, SILMAN, SUMMER, 'off_season', 1, SUMMER.slug],
+        ['next R1 day, pre-kickoff', [2026, 7, 7, 17, 0], null, SUMMER, null, 'off_season', 1, SUMMER.slug],
+        ['next R1 in play', [2026, 7, 7, 19, 0], { html: '<html/>', round: 1 }, SUMMER, null, 'in_progress', 1, SUMMER.slug],
+    ];
+
+    for (const [desc, [Y, M, D, h, m], cached, current, next, state, round, slug] of cases) {
+        it(desc, () => {
+            mockPacificTime(Y, M, D, h, m);
+            const result = computeAppState(cached, meta(current, next));
+            expect(result.state).toBe(state);
+            expect(result.round).toBe(round);
+            expect(result.tournamentSlug).toBe(slug);
+        });
+    }
 });
 
 // ─── getTimeState — round-trip through known transition windows ────────
