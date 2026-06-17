@@ -209,7 +209,7 @@ const STATE_CONFIG = {
     [STATE.TOO_EARLY]: { className: 'too-early', answer: 'CHILL', buttonText: 'Check Again', buttonHash: null },
     [STATE.IN_PROGRESS]: {
         className: 'in-progress',
-        answer: () => `ROUND ${getAppState().lastRoundNumber}`,
+        answer: () => `ROUND ${getAppState().round}`,
         buttonText: 'Check Again',
         buttonHash: null,
     },

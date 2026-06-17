@@ -62,7 +62,7 @@ export const STATE = {
 };
 
 // Runtime app state (written by app.js, read by ui/share/countdown)
-let _appState = { state: null, pairing: null, lastRoundNumber: 1, roundInfo: '' };
+let _appState = { state: null, round: 0, pairing: null, roundInfo: '' };
 
 export function getAppState() {
     return _appState;

@@ -205,27 +205,30 @@ function renderState(stateData, trackerRounds) {
     const meta = getTournamentMeta();
     const info = getInfoText(state, roundNumber, meta.name, meta.roundDates);
 
-    updateAppState({ state, roundInfo: info || '' });
+    // Tournament-level facts (state, current round, info text) are set together,
+    // once. They describe where the tournament is — independent of any player —
+    // so they don't belong in the per-player pairing branches below. (Round
+    // living in those branches is what let the bye path leave the headline at
+    // its default of 1.)
+    updateAppState({ state, round: roundNumber, roundInfo: info || '' });
     if (state !== 'no') stopCountdown();
 
-    // Stash pairing info for share text
+    // Player-level pairing info — consumed only by the share text.
     const currentRound = trackerRounds?.[roundNumber];
     if (currentRound && !currentRound.isBye) {
         updateAppState({
-            lastRoundNumber: roundNumber || 1,
             pairing: {
                 board: currentRound.board,
                 color: currentRound.color,
                 opponent: currentRound.opponent,
                 opponentRating: currentRound.opponentRating,
-                round: roundNumber,
                 playerResult: currentRound.result || null,
             },
         });
     } else if (currentRound?.isBye) {
-        updateAppState({ pairing: { isBye: true, byeType: currentRound.byeType, round: roundNumber } });
+        updateAppState({ pairing: { isBye: true, byeType: currentRound.byeType } });
     } else {
-        updateAppState({ lastRoundNumber: roundNumber || 1, pairing: null });
+        updateAppState({ pairing: null });
     }
 
     if (state === 'off_season') {
