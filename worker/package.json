@@ -13,7 +13,7 @@
     "wrangler": "^4.88.0"
   },
   "dependencies": {
-    "@cf-wasm/resvg": "^0.3.4",
+    "@cf-wasm/resvg": "^0.3.5",
     "chess.js": "^1.4.0"
   }
 }
