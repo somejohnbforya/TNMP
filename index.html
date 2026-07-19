@@ -229,7 +229,7 @@
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-content-wide gif-maker-content">
             <button data-close-modal class="modal-close-btn" aria-label="Close">✕</button>
-            <h2 id="gif-maker-title">GIF Maker</h2>
+            <h2 id="gif-maker-title">Share as Video</h2>
 
             <div class="gif-maker-body">
 
@@ -262,6 +262,14 @@
                     </div>
 
                     <div class="gif-behavior raised-panel">
+                        <div class="gif-behavior-row">
+                            <label class="gif-maker-label">Format</label>
+                            <div class="gif-timing-options" id="gif-format-options">
+                                <label><input type="radio" name="gif-format" value="mp4" checked> Video (MP4)</label>
+                                <label><input type="radio" name="gif-format" value="gif"> GIF loop</label>
+                            </div>
+                        </div>
+
                         <div class="gif-behavior-row">
                             <label class="gif-maker-label">Time per move</label>
                             <div class="gif-timing-options" id="gif-timing-options">
@@ -313,8 +321,10 @@
 
                         <!-- Result (shown after Generate) -->
                         <div id="gif-result" class="gif-result hidden">
-                            <img id="gif-result-img" class="gif-result-img" alt="Generated GIF preview">
+                            <img id="gif-result-img" class="gif-result-img hidden" alt="Generated GIF preview">
+                            <video id="gif-result-video" class="gif-result-img hidden" controls playsinline></video>
                             <div class="gif-result-actions">
+                                <button id="gif-share-btn" class="modal-btn modal-btn-primary hidden">Share…</button>
                                 <button id="gif-download-btn" class="modal-btn modal-btn-primary">Download</button>
                                 <button id="gif-regen-btn" class="modal-btn">Regenerate</button>
                             </div>

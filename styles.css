@@ -5795,7 +5795,7 @@ input.browser-search-input {
     flex-direction: column;
 }
 .gif-preview {
-    aspect-ratio: 1;
+    aspect-ratio: 72 / 86; /* board + header/footer bars (720×860 frame) */
     width: 100%;
     background: var(--surface);
     border-radius: var(--radius-xs);
@@ -5807,6 +5807,17 @@ input.browser-search-input {
     overflow: hidden;
 }
 .gif-preview:empty::before { content: 'preview'; }
+.gif-preview svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+.gif-preview-error {
+    padding: 1rem;
+    color: var(--text-faint);
+    text-align: center;
+}
+video.gif-result-img { background: #000; }
 
 .gif-scrubber-wrap {
     display: flex;

@@ -221,6 +221,7 @@ function buildTabDOM() {
                         <button class="share-option" data-action="share-copy-pgn">Copy PGN</button>
                         <button class="share-option" data-action="share-copy-link">Copy Link</button>
                         <button class="share-option" data-action="share-download">Download PGN</button>
+                        <button class="share-option" data-action="share-video">Share as video…</button>
                         <button class="share-option" data-action="viewer-analysis">Analyze on Lichess</button>
                         <button class="share-option" data-action="share-native">Share...</button>
                     </div>
@@ -239,6 +240,7 @@ function buildTabDOM() {
                     <button class="overflow-item" data-action="share-copy-pgn">${icon('copy')}Copy PGN</button>
                     <button class="overflow-item" data-action="share-copy-link">${icon('link')}Copy Link</button>
                     <button class="overflow-item" data-action="share-download">${icon('download')}Download PGN</button>
+                    <button class="overflow-item" data-action="share-video">${icon('share')}Share as video…</button>
                     <button class="overflow-item" data-action="share-native">${icon('share')}Share...</button>
                 </div>
             </div>

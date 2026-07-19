@@ -81,7 +81,7 @@ import { openCollectionBrowser } from './collection-browser.js';
 import { queryGames, prefetchGames } from './tnm.js';
 import { formatName, getHeader, resultDisplay, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
-import './gif-maker.js'; // side-effect: registers #gif hash trigger + window.openGifMaker
+import { openGifMaker } from './gif-maker.js'; // also registers #gif hash trigger + window.openGifMaker
 
 function downloadPgn(pgnText, filename) {
     const blob = new Blob([pgnText], { type: 'application/x-chess-pgn' });
@@ -550,6 +550,7 @@ const ACTIONS = {
     'share-copy-pgn': () => handleShareAction('copy-pgn'),
     'share-copy-link': () => handleShareAction('copy-link'),
     'share-download': () => handleShareAction('download'),
+    'share-video': () => handleShareAction('video'),
     'share-native': () => handleShareAction('share'),
     'close-panel': closeGamePanel,
     'navbar-back': navbarBack,
@@ -728,6 +729,8 @@ async function handleShareAction(action) {
             fn = d ? `${w}-${b}-${d}.pgn` : `${w}-${b}.pgn`;
         }
         downloadPgn(pgn, fn);
+    } else if (action === 'video') {
+        openGifMaker(pgn);
     } else if (action === 'share') {
         const gameId = getHeader(pgn, 'GameId');
         const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];

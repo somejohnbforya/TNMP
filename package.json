@@ -31,6 +31,7 @@
     "@lichess-org/chessground": "^10.1.1",
     "@lichess-org/stockfish-web": "^0.2.3",
     "chess.js": "^1.4.0",
-    "gifenc": "^1.0.3"
+    "gifenc": "^1.0.3",
+    "mp4-muxer": "^5.2.2"
   }
 }
