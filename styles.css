@@ -5652,6 +5652,12 @@ input.browser-search-input {
     max-width: 880px;
     width: 95%;
     padding: 1.5rem 1.5rem 1.25rem;
+    /* Tall content (esp. stacked single-column on phones): cap to the
+       viewport and scroll inside the modal, not the page. */
+    max-height: calc(100vh - 2rem);
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 #gif-maker-title {
