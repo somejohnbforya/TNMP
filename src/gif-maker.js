@@ -65,6 +65,9 @@ function getDelayMs() {
 
 let mp4Supported = null; // resolved on first open
 
+const CFR_FPS = 10; // constant-frame-rate grid for the MP4 (see generateMp4)
+const TICK_MS = 1000 / CFR_FPS;
+
 // ─── DOM refs (resolved on init) ──────────────────────────────────
 
 let dom = null;
@@ -307,6 +310,36 @@ async function frameSVG(i, { final = false } = {}) {
 const PIECE_CODES = ['wK', 'wQ', 'wR', 'wB', 'wN', 'wP', 'bK', 'bQ', 'bR', 'bB', 'bN', 'bP'];
 const pieceCache = new Map();
 
+// Some piece sets (e.g. the Illustrator-exported default set) style via
+// <style> blocks with class names that REPEAT across files (wN and bN both
+// define .clsN-2, with different fills). Inlined into one parent SVG those
+// rules cascade document-wide and the last block wins — every piece turns
+// one color. Bake each file's flat class rules onto its elements as plain
+// attributes and drop the <style>, so every piece is self-contained.
+// Attribute-styled sets (cburnett etc.) have no <style> and pass through.
+function inlinePieceStyles(svgText) {
+    if (!svgText.includes('<style')) return svgText;
+    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    const root = doc.documentElement;
+    for (const styleEl of root.querySelectorAll('style')) {
+        const css = styleEl.textContent;
+        // Flat `.a,.b{decls}` rules only — all these generated sets use.
+        for (const [, selectors, decls] of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+            const classes = [...selectors.matchAll(/\.([\w-]+)/g)].map((m) => m[1]);
+            if (!classes.length) continue;
+            const attrs = [...decls.matchAll(/([\w-]+)\s*:\s*([^;]+)/g)];
+            for (const cls of classes) {
+                for (const el of root.querySelectorAll(`.${CSS.escape(cls)}`)) {
+                    for (const [, prop, value] of attrs) el.setAttribute(prop.trim(), value.trim());
+                }
+            }
+        }
+        styleEl.remove();
+    }
+    for (const el of root.querySelectorAll('[class]')) el.removeAttribute('class');
+    return new XMLSerializer().serializeToString(root);
+}
+
 async function loadPieceSvgs(themeId) {
     if (pieceCache.has(themeId)) return pieceCache.get(themeId);
     const svgs = {};
@@ -314,7 +347,7 @@ async function loadPieceSvgs(themeId) {
         PIECE_CODES.map(async (code) => {
             const res = await fetch(`/pieces/${themeId}/${code}.svg`);
             if (!res.ok) throw new Error(`piece fetch failed: ${themeId}/${code}`);
-            svgs[code] = await res.text();
+            svgs[code] = inlinePieceStyles(await res.text());
         }),
     );
     const pieces = { name: themeId, svgs };
@@ -537,16 +570,25 @@ async function generateMp4() {
     });
     encoder.configure(support.config);
 
+    // Constant frame rate on a 10fps grid — per-sample (VFR) durations are
+    // legal MP4 but players/encoders pace them unevenly; duplicated ticks
+    // are near-free P-frames and every player handles a uniform grid.
     const durations = frameDurations();
     const n = state.fens.length;
-    const keyEvery = Math.max(1, Math.round(10000 / getDelayMs())); // ≈ one keyframe / 10s
-    let tUs = 0;
+    const keyEveryTicks = CFR_FPS * 10; // ≈ one keyframe / 10s
+    let tick = 0;
     for (let i = 0; i < n; i++) {
         await drawFrame(ctx, i, { final: i === n - 1 });
-        const frame = new VideoFrame(canvas, { timestamp: tUs, duration: durations[i] * 1000 });
-        encoder.encode(frame, { keyFrame: i % keyEvery === 0, ...support.encodeOpts });
-        frame.close();
-        tUs += durations[i] * 1000;
+        const ticks = Math.max(1, Math.round(durations[i] / TICK_MS));
+        for (let k = 0; k < ticks; k++) {
+            const frame = new VideoFrame(canvas, {
+                timestamp: tick * TICK_MS * 1000,
+                duration: TICK_MS * 1000,
+            });
+            encoder.encode(frame, { keyFrame: tick % keyEveryTicks === 0, ...support.encodeOpts });
+            frame.close();
+            tick++;
+        }
         setProgress((i + 1) / (n + 1), `Frame ${i + 1} / ${n}`);
     }
     setProgress(n / (n + 1), 'Encoding…');
@@ -569,7 +611,7 @@ async function detectMp4Support() {
         codec: 'avc1.640028',
         width: W,
         height: H,
-        framerate: Math.max(1, Math.round(1000 / getDelayMs())),
+        framerate: CFR_FPS,
     };
     try {
         const q = await VideoEncoder.isConfigSupported({ ...base, bitrate: 1_000_000, bitrateMode: 'quantizer' });
@@ -580,11 +622,10 @@ async function detectMp4Support() {
             };
             return mp4Supported;
         }
-        const perSecond = Math.round(60_000 * (1000 / getDelayMs()));
-        const v = await VideoEncoder.isConfigSupported({ ...base, bitrate: perSecond, bitrateMode: 'variable' });
+        const v = await VideoEncoder.isConfigSupported({ ...base, bitrate: 100_000, bitrateMode: 'variable' });
         if (v.supported) {
             mp4Supported = {
-                config: { ...base, bitrate: perSecond, bitrateMode: 'variable', latencyMode: 'quality' },
+                config: { ...base, bitrate: 100_000, bitrateMode: 'variable', latencyMode: 'quality' },
                 encodeOpts: {},
             };
             return mp4Supported;
