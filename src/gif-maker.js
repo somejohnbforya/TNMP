@@ -6,7 +6,7 @@
 // frame can be the paused one. MP4: WebCodecs H.264 → mp4-muxer.
 // GIF: gifenc, kept as the no-WebCodecs fallback and the loop-lovers option.
 
-import { openModal } from './modal.js';
+import { onModalClose, openModal } from './modal.js';
 import { splitPgn, extractMoveText, parseMoveText, parseRecord } from './pgn-parser.js';
 import {
     PIECE_THEMES,
@@ -715,10 +715,20 @@ export async function openGifMaker(prefilledPgn = '') {
     openModal('gif-maker-modal');
 }
 
-// Dev convenience: trigger via URL hash `#gif`.
+// Deep link: `#gif` opens the maker — on hash CHANGE and on initial load
+// (hashchange never fires for a hash already present at page load, so a
+// refresh must be handled explicitly). Closing the modal clears the hash
+// so the next refresh doesn't surprise-reopen it.
 if (typeof window !== 'undefined') {
-    window.addEventListener('hashchange', () => {
+    const openIfHash = () => {
         if (location.hash === '#gif') openGifMaker();
+    };
+    window.addEventListener('hashchange', openIfHash);
+    openIfHash();
+    onModalClose('gif-maker-modal', () => {
+        if (location.hash === '#gif') {
+            history.replaceState(null, '', location.pathname + location.search);
+        }
     });
     window.openGifMaker = openGifMaker;
 }
