@@ -28,9 +28,12 @@ import { renderToSVG } from './vendor/rabbit-static.js';
 const BOARD = 720; // board pixels; header/footer scale from it
 const px = (n) => Math.round((n * BOARD) / 720);
 const HEADER = px(76);
-const FOOTER = px(64) + ((px(76) + BOARD + px(64)) % 2); // keep H even for yuv420p
 const W = BOARD;
-const H = HEADER + BOARD + FOOTER;
+// Round total height UP to a multiple of 16 (footer absorbs the slack):
+// hardware decoders work in 16px macroblocks, and a non-aligned height
+// relies on crop metadata some older phone decoders misapply (stretched/
+// squished playback). 76 + 720 + 64 = 860 → 864.
+const H = Math.ceil((HEADER + BOARD + px(64)) / 16) * 16;
 const FONT = 'Helvetica, Arial, sans-serif';
 
 // ─── State ────────────────────────────────────────────────────────
@@ -91,6 +94,7 @@ function resolveDom() {
         flip: document.getElementById('gif-flip-board'),
         finalHold: document.getElementById('gif-final-hold'),
         format: document.getElementById('gif-format-options'),
+        formatRow: document.getElementById('gif-format-row'),
         generateBtn: document.getElementById('gif-generate-btn'),
         progress: document.getElementById('gif-progress'),
         progressFill: document.getElementById('gif-progress-fill'),
@@ -600,10 +604,16 @@ async function generateMp4() {
 }
 
 // Probe once: quantizer-mode rate control where available (constant quality —
-// measured best for flat board art), else VBR sized to the frame cadence.
+// measured best for flat board art), else VBR. The two probes are isolated:
+// a browser whose WebIDL rejects the newer 'quantizer' enum value THROWS on
+// the first probe, and that must not skip the VBR fallback it does support.
+// Debug: ?vdebug=novq forces the VBR path, ?vdebug=nowc simulates no
+// WebCodecs (GIF-only UI).
 async function detectMp4Support() {
     if (mp4Supported !== null) return mp4Supported;
-    if (typeof VideoEncoder === 'undefined') {
+    const debug = new URLSearchParams(location.search).get('vdebug');
+    if (typeof VideoEncoder === 'undefined' || debug === 'nowc') {
+        console.info('Share as Video: MP4 unavailable (no WebCodecs) — GIF only');
         mp4Supported = false;
         return mp4Supported;
     }
@@ -613,15 +623,21 @@ async function detectMp4Support() {
         height: H,
         framerate: CFR_FPS,
     };
-    try {
-        const q = await VideoEncoder.isConfigSupported({ ...base, bitrate: 1_000_000, bitrateMode: 'quantizer' });
-        if (q.supported) {
-            mp4Supported = {
-                config: { ...base, bitrate: 1_000_000, bitrateMode: 'quantizer', latencyMode: 'quality' },
-                encodeOpts: { avc: { quantizer: 26 } },
-            };
-            return mp4Supported;
+    if (debug !== 'novq') {
+        try {
+            const q = await VideoEncoder.isConfigSupported({ ...base, bitrate: 1_000_000, bitrateMode: 'quantizer' });
+            if (q.supported) {
+                mp4Supported = {
+                    config: { ...base, bitrate: 1_000_000, bitrateMode: 'quantizer', latencyMode: 'quality' },
+                    encodeOpts: { avc: { quantizer: 26 } },
+                };
+                return mp4Supported;
+            }
+        } catch {
+            /* 'quantizer' enum unknown here — VBR probe below still applies */
         }
+    }
+    try {
         const v = await VideoEncoder.isConfigSupported({ ...base, bitrate: 100_000, bitrateMode: 'variable' });
         if (v.supported) {
             mp4Supported = {
@@ -633,6 +649,7 @@ async function detectMp4Support() {
     } catch {
         /* fall through */
     }
+    console.info('Share as Video: MP4 unavailable (no supported H.264 config) — GIF only');
     mp4Supported = false;
     return mp4Supported;
 }
@@ -694,11 +711,12 @@ export async function openGifMaker(prefilledPgn = '') {
         wireControls();
         renderPreview();
         updateScrubber();
-        // MP4 only where WebCodecs can actually encode it.
+        // MP4 only where WebCodecs can actually encode it — hide the whole
+        // format row (label included), not just the radios.
         const support = await detectMp4Support();
         if (!support) {
             state.options.format = 'gif';
-            dom.format.classList.add('hidden');
+            dom.formatRow.classList.add('hidden');
         }
         updateGenerateBtn();
         initialized = true;

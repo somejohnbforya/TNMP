@@ -5801,7 +5801,7 @@ input.browser-search-input {
     flex-direction: column;
 }
 .gif-preview {
-    aspect-ratio: 72 / 86; /* board + header/footer bars (720×860 frame) */
+    aspect-ratio: 5 / 6; /* board + header/footer bars (720×864 frame) */
     width: 100%;
     background: var(--surface);
     border-radius: var(--radius-xs);
