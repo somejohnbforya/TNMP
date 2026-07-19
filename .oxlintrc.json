@@ -22,6 +22,7 @@
   },
   "ignorePatterns": [
     "dist/",
+    "src/vendor/",
     "dist-embed/",
     "local/",
     "node_modules/",
