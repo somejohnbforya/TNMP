@@ -25,7 +25,11 @@
 </head>
 <body class="tnmp">
     <div class="container">
-        <h1 class="title">Are the Pairings Up?</h1>
+        <div class="home-topbar">
+            <span id="home-context"></span>
+            <span id="home-live" class="home-live hidden"><span class="live-dot" aria-hidden="true"></span>LIVE</span>
+        </div>
+        <h1 class="home-prompt">Are the pairings up?</h1>
 
         <div id="loading" class="loading" role="status" aria-label="Checking pairings">
             <div class="spinner" aria-hidden="true"></div>
@@ -33,85 +37,23 @@
         </div>
 
         <div id="result" class="result hidden" role="status" aria-live="polite">
-            <div id="answer" class="answer"></div>
+            <div id="answer" class="answer-fit"></div>
+            <p id="round-info" class="home-sub"></p>
+
             <div id="tracker-section" class="tracker-section hidden">
-                <div id="round-tracker" class="round-tracker">
-                    <div class="tracker-row">
-                        <button class="tracker-round" data-round="1" aria-label="Round 1"></button>
-                        <button class="tracker-round" data-round="2" aria-label="Round 2"></button>
-                        <button class="tracker-round" data-round="3" aria-label="Round 3"></button>
-                        <button class="tracker-round" data-round="4" aria-label="Round 4"></button>
-                        <button class="tracker-round" data-round="5" aria-label="Round 5"></button>
-                        <button class="tracker-round" data-round="6" aria-label="Round 6"></button>
-                        <button class="tracker-round" data-round="7" aria-label="Round 7"></button>
-                    </div>
-                    <div class="tracker-detail" data-round="1">
-                        <div class="pairing-history-label"></div>
-                        <div class="pairing-result"></div>
-                        <div class="pairing-opponent">
-                            <img class="color-icon" src="" alt="">
-                            <span>vs <button type="button" class="opponent-link" data-action="open-profile"></button></span>
-                        </div>
-                        <button class="view-game-btn" data-action="view-tracker-game">View Game</button>
-                    </div>
-                    <div class="tracker-detail" data-round="2">
-                        <div class="pairing-history-label"></div>
-                        <div class="pairing-result"></div>
-                        <div class="pairing-opponent">
-                            <img class="color-icon" src="" alt="">
-                            <span>vs <button type="button" class="opponent-link" data-action="open-profile"></button></span>
-                        </div>
-                        <button class="view-game-btn" data-action="view-tracker-game">View Game</button>
-                    </div>
-                    <div class="tracker-detail" data-round="3">
-                        <div class="pairing-history-label"></div>
-                        <div class="pairing-result"></div>
-                        <div class="pairing-opponent">
-                            <img class="color-icon" src="" alt="">
-                            <span>vs <button type="button" class="opponent-link" data-action="open-profile"></button></span>
-                        </div>
-                        <button class="view-game-btn" data-action="view-tracker-game">View Game</button>
-                    </div>
-                    <div class="tracker-detail" data-round="4">
-                        <div class="pairing-history-label"></div>
-                        <div class="pairing-result"></div>
-                        <div class="pairing-opponent">
-                            <img class="color-icon" src="" alt="">
-                            <span>vs <button type="button" class="opponent-link" data-action="open-profile"></button></span>
-                        </div>
-                        <button class="view-game-btn" data-action="view-tracker-game">View Game</button>
-                    </div>
-                    <div class="tracker-detail" data-round="5">
-                        <div class="pairing-history-label"></div>
-                        <div class="pairing-result"></div>
-                        <div class="pairing-opponent">
-                            <img class="color-icon" src="" alt="">
-                            <span>vs <button type="button" class="opponent-link" data-action="open-profile"></button></span>
-                        </div>
-                        <button class="view-game-btn" data-action="view-tracker-game">View Game</button>
-                    </div>
-                    <div class="tracker-detail" data-round="6">
-                        <div class="pairing-history-label"></div>
-                        <div class="pairing-result"></div>
-                        <div class="pairing-opponent">
-                            <img class="color-icon" src="" alt="">
-                            <span>vs <button type="button" class="opponent-link" data-action="open-profile"></button></span>
-                        </div>
-                        <button class="view-game-btn" data-action="view-tracker-game">View Game</button>
-                    </div>
-                    <div class="tracker-detail" data-round="7">
-                        <div class="pairing-history-label"></div>
-                        <div class="pairing-result"></div>
-                        <div class="pairing-opponent">
-                            <img class="color-icon" src="" alt="">
-                            <span>vs <button type="button" class="opponent-link" data-action="open-profile"></button></span>
-                        </div>
-                        <button class="view-game-btn" data-action="view-tracker-game">View Game</button>
-                    </div>
+                <div class="tracker-meta">
+                    <button type="button" id="tracker-player" class="tracker-player" data-action="open-profile"></button>
+                    <span id="tracker-score" class="tracker-score"></span>
                 </div>
+                <div id="round-tracker" class="tracker-bar"></div>
+                <div id="tracker-expanded"></div>
             </div>
-            <div id="meme" class="meme"></div>
-            <p id="round-info" class="round-info"></p>
+
+            <div id="pairing-section" class="pairing-section hidden"></div>
+
+            <div id="meme" class="meme hidden"></div>
+
+            <div id="home-extra" class="home-extra"></div>
         </div>
 
         <div class="refresh-container">

@@ -1,5 +1,4 @@
-import { STATE, getTournamentMeta, getAppState } from './config.js';
-import { resultDisplay } from './utils.js';
+import { STATE, CONFIG, getTournamentMeta, getAppState } from './config.js';
 
 // ─── Countdown (NO-state 60s ticker + off-season day/hour/min/sec) ─
 
@@ -85,7 +84,7 @@ export function stopOffSeasonCountdown() {
     offSeasonInterval = null;
 }
 
-// ─── Memes ─────────────────────────────────────────────────────────
+// ─── Memes (card + caption, and texture inside the answer letters) ─
 
 const MEME_DATA = {
     [STATE.TOO_EARLY]: {
@@ -144,6 +143,7 @@ const MEME_DATA = {
 
 export function getRandomMeme(state) {
     const data = MEME_DATA[state];
+    if (!data) return null;
     const n = Math.floor(Math.random() * data.count) + 1;
     return {
         img: `memes/${state}_${n}.webp`,
@@ -151,40 +151,90 @@ export function getRandomMeme(state) {
     };
 }
 
+// Color-first tint over the meme texture — state color dominates, the
+// meme reads as a faint image inside the glyphs (design: meme-letters).
+const STATE_TINT = {
+    [STATE.YES]: '#5dd67c',
+    [STATE.NO]: '#ef4f5e',
+    [STATE.IN_PROGRESS]: '#6fb3f2',
+    [STATE.RESULTS]: '#9ec5ff',
+    [STATE.TOO_EARLY]: '#c77fd6',
+    [STATE.OFF_SEASON]: '#9dc183',
+};
+
 /** Set the state class on <html>, preserving the tnmp and dark-mode classes. */
 function setHtmlClass(stateClass) {
     const dark = document.documentElement.classList.contains('dark-mode');
     document.documentElement.className = `tnmp${dark ? ' dark-mode' : ''} ${stateClass}`;
 }
 
-// --- Answer text fitting ---
+const esc = (s) =>
+    String(s ?? '').replace(
+        /[&<>"']/g,
+        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+    );
 
-let fitAnswerRafId = null;
+const surname = (name) => (name || '').trim().split(/\s+/).pop() || '';
 
-function fitTextToContainer(el, { minSize = 16, widthFraction = 0.92 } = {}) {
-    if (!el || !el.textContent) return;
-    el.style.fontSize = '';
+const PIECE_ICON = { White: 'wK', Black: 'bK' };
+const pieceImg = (color, size = 22, cls = '') =>
+    `<img class="${cls}" src="pieces/default/${PIECE_ICON[color]}.svg" alt="${color}" width="${size}" height="${size}">`;
+const duckImg = (size = 22, cls = '') =>
+    `<img class="${cls}" src="pieces/Duck.svg" alt="Bye" width="${size}" height="${size}">`;
 
-    return requestAnimationFrame(() => {
-        const container = el.parentElement;
-        if (!container) return;
-        const maxWidth = container.clientWidth * widthFraction;
-        if (maxWidth <= 0) return;
+const fmtPacific = (iso, opts) =>
+    iso ? new Date(iso).toLocaleString('en-US', { timeZone: 'America/Los_Angeles', ...opts }) : '';
+const fmtDay = (iso) => fmtPacific(iso, { month: 'short', day: 'numeric' });
+const fmtTime = (iso) => fmtPacific(iso, { hour: 'numeric', minute: '2-digit' });
 
-        const baseSize = parseFloat(getComputedStyle(el).fontSize);
-        if (el.scrollWidth > maxWidth) {
-            el.style.fontSize = Math.max(minSize, Math.floor(baseSize * (maxWidth / el.scrollWidth))) + 'px';
-        }
+// ─── Fluid answer (FitText) ────────────────────────────────────────
+//
+// The answer renders as an SVG <text> whose viewBox is fit to the glyph
+// bbox, so the word always spans the container at any length ("YES",
+// "ROUND 12", "COMPLETE") with no JS resize handling. Dark mode fills
+// with the state tint; gradient (light) mode with white.
+
+let _lastAnswer = null; // re-render on theme toggle
+
+function renderAnswer(text, state) {
+    const el = document.getElementById('answer');
+    if (!el) return;
+    _lastAnswer = { text, state };
+
+    const dark = document.documentElement.classList.contains('dark-mode');
+    const fill = dark ? STATE_TINT[state] || '#9e9e9e' : '#ffffff';
+
+    el.innerHTML = `
+        <svg class="answer-svg" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <text x="0" y="0" font-weight="900" font-size="200" letter-spacing="-9" fill="${fill}">${esc(text)}</text>
+        </svg>
+        <span class="visually-hidden">${esc(text)}</span>
+    `;
+
+    const svg = el.querySelector('svg');
+    const textEl = svg.querySelector('text');
+    const fit = () => {
+        if (!svg.isConnected) return;
+        const bb = textEl.getBBox();
+        if (!bb.width) return;
+        // getBBox height is the full em box (ascent+descent padding).
+        // Answers are all caps/digits, so crop to cap height above the
+        // baseline (y=0) plus a hair of round-glyph overshoot.
+        const cap = 146; // Geist cap height at font-size 200
+        const over = 4;
+        svg.setAttribute('viewBox', `${bb.x} ${-cap - over} ${bb.width} ${cap + over * 2}`);
+    };
+    fit();
+    // Re-measure once webfonts land — the first pass may size with a fallback.
+    document.fonts?.ready.then(fit);
+}
+
+// Theme toggles (style panel) swap between tinted and white letters.
+if (typeof window !== 'undefined') {
+    window.addEventListener('tnmp-theme-change', () => {
+        if (_lastAnswer) renderAnswer(_lastAnswer.text, _lastAnswer.state);
     });
 }
-
-function fitAnswerText() {
-    const el = document.getElementById('answer');
-    if (fitAnswerRafId) cancelAnimationFrame(fitAnswerRafId);
-    fitAnswerRafId = fitTextToContainer(el);
-}
-
-if (typeof window !== 'undefined') window.addEventListener('resize', fitAnswerText);
 
 // --- Public API ---
 
@@ -196,11 +246,22 @@ export function updateTournamentLink() {
     if (meta.name) link.textContent = `View ${meta.name}`;
 }
 
+function updateTopbar(state) {
+    const ctxEl = document.getElementById('home-context');
+    const liveEl = document.getElementById('home-live');
+    if (ctxEl) {
+        const name = getTournamentMeta().name || 'Tuesday Night Marathon';
+        ctxEl.textContent = name.replace(/Tuesday Night Marathon/i, 'TNM');
+    }
+    if (liveEl) liveEl.classList.toggle('hidden', state !== STATE.YES && state !== STATE.IN_PROGRESS);
+}
+
 export function showLoading() {
     setHtmlClass('loading-state');
     document.getElementById('loading').classList.remove('hidden');
     document.getElementById('result').classList.add('hidden');
     document.getElementById('check-btn').disabled = true;
+    updateTopbar(null);
 }
 
 const STATE_CONFIG = {
@@ -222,42 +283,46 @@ export function showState(state, info, offSeasonData = null) {
     document.getElementById('result').classList.remove('hidden');
     document.getElementById('check-btn').disabled = false;
 
-    const answerEl = document.getElementById('answer');
-    const memeEl = document.getElementById('meme');
-
     const config = STATE_CONFIG[state];
     setHtmlClass(config.className);
-    answerEl.textContent = typeof config.answer === 'function' ? config.answer() : config.answer;
-    fitAnswerText();
+    updateTopbar(state);
+
+    renderAnswer(typeof config.answer === 'function' ? config.answer() : config.answer, state);
+
+    const meme = getRandomMeme(state);
+    const memeEl = document.getElementById('meme');
+    if (meme) {
+        memeEl.innerHTML = `
+            <img src="${meme.img}" alt="" role="presentation">
+            <p class="meme-text">${esc(meme.text)}</p>
+        `;
+        memeEl.classList.remove('hidden');
+        const img = memeEl.querySelector('img');
+        img.addEventListener('error', () => {
+            img.style.display = 'none';
+        });
+    } else {
+        memeEl.innerHTML = '';
+        memeEl.classList.add('hidden');
+    }
 
     stopOffSeasonCountdown();
 
+    const extraEl = document.getElementById('home-extra');
     if (state === STATE.OFF_SEASON) {
         if (offSeasonData?.targetDate) {
-            memeEl.innerHTML = `<div class="off-season-countdown" id="off-season-countdown"></div>`;
+            extraEl.innerHTML = `<div class="off-season-countdown" id="off-season-countdown"></div>`;
             startOffSeasonCountdown(new Date(offSeasonData.targetDate));
         } else {
-            memeEl.innerHTML = '';
+            extraEl.innerHTML = '';
         }
-        // Hide the tracker section but leave its children (the round tabs and
-        // detail panels live in static HTML; renderRoundTracker queries them
-        // by data-round). Wiping innerHTML here used to delete those tabs,
-        // and the next non-off-season render would crash trying to set
-        // className on a nulled querySelector result.
-        const trackerSection = document.getElementById('tracker-section');
-        if (trackerSection) trackerSection.classList.add('hidden');
+        // Hide the player panels — off-season has no rounds or pairing.
+        document.getElementById('tracker-section')?.classList.add('hidden');
+        document.getElementById('pairing-section')?.classList.add('hidden');
     } else {
-        const meme = getRandomMeme(state);
-        memeEl.innerHTML = `
-            <img src="${meme.img}" alt="" role="presentation">
-            <p class="meme-text">${meme.text}</p>
-        `;
-        const img = memeEl.querySelector('img');
-        if (img)
-            img.addEventListener('error', () => {
-                img.style.display = 'none';
-            });
+        extraEl.innerHTML = '';
     }
+
     document.getElementById('round-info').textContent = info || '';
 
     // Button
@@ -275,121 +340,265 @@ export function hideOfflineBanner() {
     if (banner) banner.classList.remove('show');
 }
 
-// --- Round Tracker ---
+// ─── Round Tracker (scoreboard bar + expanded detail) ──────────────
 
-const RESULT_CLASS = {
-    W: 'tracker-win',
-    L: 'tracker-loss',
-    D: 'tracker-draw',
-    H: 'tracker-bye',
-    B: 'tracker-bye',
-    U: 'tracker-bye',
+const CELL_CLASS = { W: 'tb-w', L: 'tb-l', D: 'tb-d', B: 'tb-bye', H: 'tb-bye', U: 'tb-bye' };
+
+const RESULT_VERB = {
+    W: { label: 'You won', cls: 'td-verb-w' },
+    L: { label: 'You lost', cls: 'td-verb-l' },
+    D: { label: 'You drew', cls: 'td-verb-d' },
 };
-const PIECE_ICON = { White: 'wK', Black: 'bK' };
 
-export function renderRoundTracker(rounds, _totalRounds, currentRound, currentState, selectedRound = null) {
+const BYE_LABEL = { full: 'Full-point bye', half: 'Half-point bye', zero: 'Zero-point bye' };
+
+/** Score summary across played rounds: W/B=1, D/H=½, L/U=0. */
+export function playerScore(rounds) {
+    let score = 0;
+    let played = 0;
+    for (const r of Object.values(rounds || {})) {
+        if (!r?.result) continue;
+        played++;
+        if (r.result === 'W' || r.result === 'B') score += 1;
+        else if (r.result === 'D' || r.result === 'H') score += 0.5;
+    }
+    return { score, played };
+}
+
+const fmtScore = (n) => {
+    const whole = Math.floor(n);
+    const half = n - whole >= 0.5;
+    if (half) return whole === 0 ? '½' : `${whole}½`;
+    return String(whole);
+};
+
+/** One tracker cell per round. Pure: data in, HTML out. */
+export function buildTrackerCellsHtml(rounds, totalRounds, currentRound, state, selectedRound) {
+    const isLiveNext = state === STATE.YES || state === STATE.IN_PROGRESS;
+    let html = '';
+    for (let i = 1; i <= totalRounds; i++) {
+        const r = rounds[i];
+        const played = !!r?.result;
+        const isLive = i === currentRound && isLiveNext;
+        const clickable = played || (r && i === currentRound);
+        const cls = [
+            'tracker-cell',
+            played ? CELL_CLASS[r.result] || 'tb-d' : 'tb-x',
+            i === selectedRound ? 'tb-selected' : '',
+            isLive ? 'tb-live' : '',
+        ]
+            .filter(Boolean)
+            .join(' ');
+        let content;
+        if (r?.isBye) content = duckImg(22, 'tb-piece');
+        else if (r?.color) content = pieceImg(r.color, 22, 'tb-piece');
+        else if (isLive) content = '<span class="tb-live-dot" aria-hidden="true"></span>';
+        else content = '<span class="tb-future-dot" aria-hidden="true">·</span>';
+        html += `
+            <button type="button" class="${cls}" data-round="${i}" ${clickable ? 'data-clickable' : 'disabled'}
+                aria-label="Round ${i}">
+                <span class="tb-num" aria-hidden="true">${i}</span>${content}
+            </button>
+        `;
+    }
+    return html;
+}
+
+/** Expanded card for the selected round. Pure: data in, HTML out. */
+export function buildTrackerDetailHtml(roundNum, r, roundDates, state) {
+    if (!r) return '';
+    const meta = `Round ${roundNum}${r.board ? ` · Board ${r.board}` : ''}`;
+    const date = fmtDay(roundDates?.[roundNum - 1]);
+
+    if (r.isBye) {
+        return `
+            <div class="tracker-detail-card">
+                <button type="button" class="td-close" data-action="tracker-close" aria-label="Close">✕</button>
+                <div class="td-meta">${esc(meta)}</div>
+                <div class="td-verb td-verb-d">${BYE_LABEL[r.byeType] || 'Bye'}</div>
+                <div class="td-opp">${duckImg(22, 'td-piece')}<span class="td-opp-sub">${esc(date)}</span></div>
+            </div>
+        `;
+    }
+
+    const verb = RESULT_VERB[r.playerResult || r.result];
+    const isLiveRound = !r.result && (state === STATE.YES || state === STATE.IN_PROGRESS);
+    const verbHtml = verb
+        ? `<div class="td-verb ${verb.cls}">${verb.label}</div>`
+        : isLiveRound
+          ? `<div class="td-verb td-verb-d">Playing tonight</div>`
+          : '';
+    const oppColor = r.color === 'White' ? 'Black' : 'White';
+    const rating = r.opponentRating ? `${r.opponentRating}` : '';
+    const sub = [rating, date].filter(Boolean).join(' · ');
+    const gameBtn =
+        r.gameId && r.result
+            ? `<button type="button" class="view-game-btn" data-action="view-tracker-game" data-game-id="${esc(r.gameId)}">View Game →</button>`
+            : '';
+
+    return `
+        <div class="tracker-detail-card">
+            <button type="button" class="td-close" data-action="tracker-close" aria-label="Close">✕</button>
+            <div class="td-meta">${esc(meta)}</div>
+            ${verbHtml}
+            <div class="td-opp">
+                ${pieceImg(oppColor, 22, 'td-piece')}
+                <div class="td-opp-text">
+                    <button type="button" class="td-opp-name" data-action="open-profile" data-name="${esc(r.opponent || '')}">${esc(r.opponent || 'Unknown')}</button>
+                    <div class="td-opp-sub">${esc(sub)}</div>
+                </div>
+            </div>
+            ${gameBtn}
+        </div>
+    `;
+}
+
+/** Split pairing pill: [you · rating · piece | VS | piece · opp · rating]. */
+export function buildPairingPillHtml(pairing, playerName, playerRating, roundNum, roundDates) {
+    const time = fmtTime(roundDates?.[roundNum - 1]);
+    const metaRow = `
+        <div class="pairing-meta">
+            <span>Round ${roundNum}${pairing.board ? ` · Board ${pairing.board}` : ''}</span>
+            <span>${esc(time)}</span>
+        </div>
+    `;
+
+    if (pairing.isBye) {
+        return `
+            ${metaRow}
+            <div class="pairing-pill pairing-pill-bye">
+                ${duckImg(26, 'pp-piece')}
+                <span class="pp-bye-label">${BYE_LABEL[pairing.byeType] || 'Bye'}</span>
+            </div>
+        `;
+    }
+
+    const youColor = pairing.color;
+    const oppColor = youColor === 'White' ? 'Black' : 'White';
+    return `
+        ${metaRow}
+        <div class="pairing-pill">
+            <div class="pp-side pp-you" title="${esc(playerName)}">
+                <div class="pp-info">
+                    <div class="pp-name">${esc(surname(playerName))}</div>
+                    ${playerRating ? `<div class="pp-rating">${esc(playerRating)}</div>` : ''}
+                </div>
+                ${pieceImg(youColor, 26, 'pp-piece')}
+            </div>
+            <div class="pp-seam" aria-hidden="true">VS</div>
+            <div class="pp-side pp-opp" title="${esc(pairing.opponent)}">
+                ${pieceImg(oppColor, 26, 'pp-piece')}
+                <div class="pp-info">
+                    <button type="button" class="pp-name pp-name-link" data-action="open-profile" data-name="${esc(pairing.opponent || '')}">${esc(surname(pairing.opponent))}</button>
+                    ${pairing.opponentRating ? `<div class="pp-rating">${esc(pairing.opponentRating)}</div>` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/** Final-standings summary pill: W / D / L counts. */
+export function buildResultsPillHtml(rounds, totalRounds) {
+    const all = Object.values(rounds || {});
+    const wins = all.filter((r) => r.result === 'W').length;
+    const draws = all.filter((r) => r.result === 'D').length;
+    const losses = all.filter((r) => r.result === 'L').length;
+    return `
+        <div class="pairing-meta">
+            <span>Final · ${totalRounds} rounds</span>
+            <span></span>
+        </div>
+        <div class="results-pill">
+            <div class="rp-seg rp-w"><span class="rp-num">${wins}</span><span class="rp-label">Wins</span></div>
+            <div class="rp-seg rp-d"><span class="rp-num">${draws}</span><span class="rp-label">Draws</span></div>
+            <div class="rp-seg rp-l"><span class="rp-num">${losses}</span><span class="rp-label">Losses</span></div>
+        </div>
+    `;
+}
+
+let _lastTracker = null;
+
+export function renderRoundTracker(rounds, totalRounds, currentRound, currentState, selectedRound = null) {
     const section = document.getElementById('tracker-section');
     const container = document.getElementById('round-tracker');
     if (!section || !container) return;
 
     if (!rounds || !Object.keys(rounds).length) {
         section.classList.add('hidden');
+        document.getElementById('pairing-section')?.classList.add('hidden');
         return;
     }
 
+    _lastTracker = { rounds, totalRounds, currentRound, currentState };
     section.classList.remove('hidden');
 
-    // Update each tab + panel with round data
-    for (let i = 1; i <= 7; i++) {
-        const r = rounds[i];
-        const tab = container.querySelector(`.tracker-round[data-round="${i}"]`);
-        const panel = container.querySelector(`.tracker-detail[data-round="${i}"]`);
-        const isLive = i === currentRound && (currentState === STATE.IN_PROGRESS || currentState === STATE.YES);
-
-        // Tab: set class + icon
-        const resultCls = r?.result
-            ? `tracker-completed ${RESULT_CLASS[r.result] || ''}`
-            : isLive
-              ? 'tracker-active tracker-current'
-              : 'tracker-future';
-        tab.className = `tracker-round ${resultCls}`;
-        tab.toggleAttribute('data-clickable', !!(r?.result || i === currentRound));
-        const iconPath = r?.isBye
-            ? 'pieces/Duck.svg'
-            : PIECE_ICON[r?.color] && `pieces/default/${PIECE_ICON[r.color]}.svg`;
-        tab.innerHTML = iconPath
-            ? `<img class="tracker-icon" src="${iconPath}" alt="${r?.color || 'Bye'}">`
-            : `<span class="tracker-number">${i}</span>`;
-
-        // Panel: fill in round data
-        if (!r) {
-            panel.classList.add('hidden');
-            continue;
-        }
-        panel.classList.remove('hidden');
-
-        const header = panel.querySelector('.pairing-history-label');
-        const resultEl = panel.querySelector('.pairing-result');
-        const gameBtn = panel.querySelector('.view-game-btn');
-        // Select by stable structure, not the `.opponent-link` class: the bye
-        // branch removes that class for styling, so selecting by it would return
-        // null on any re-render after a bye rendered once (crash on textContent).
-        const profileBtn = panel.querySelector('.pairing-opponent button');
-        const colorIcon = panel.querySelector('.color-icon');
-
-        header.textContent = `Round ${i}${r.board ? ` \u00B7 Board ${r.board}` : ''}`;
-
-        if (r.isBye) {
-            resultEl.textContent = '';
-            resultEl.classList.add('hidden');
-            const label = r.byeType === 'full' ? 'Full-point bye' : r.byeType === 'half' ? 'Half-point bye' : 'Bye';
-            colorIcon.src = 'pieces/Duck.svg';
-            colorIcon.alt = 'Bye';
-            profileBtn.textContent = label;
-            profileBtn.removeAttribute('data-action');
-            profileBtn.classList.remove('opponent-link');
-            gameBtn.classList.add('hidden');
-        } else {
-            const result = resultDisplay(r.playerResult || r.result);
-            if (result) {
-                resultEl.innerHTML = `${result.emoji} ${result.text}`;
-                resultEl.classList.remove('hidden');
-            } else {
-                resultEl.classList.add('hidden');
-            }
-
-            if (r.color) {
-                colorIcon.src = `pieces/default/${PIECE_ICON[r.color]}.svg`;
-                colorIcon.alt = r.color;
-                colorIcon.classList.remove('hidden');
-            } else {
-                colorIcon.classList.add('hidden');
-            }
-
-            const rating = r.opponentRating ? ` (${r.opponentRating})` : '';
-            profileBtn.textContent = `${r.opponent || 'Unknown'}${rating}`;
-            profileBtn.dataset.name = r.opponent || '';
-            profileBtn.setAttribute('data-action', 'open-profile');
-            profileBtn.classList.add('opponent-link');
-
-            if (r.gameId && r.result) {
-                gameBtn.dataset.gameId = r.gameId;
-                gameBtn.classList.remove('hidden');
-            } else {
-                gameBtn.classList.add('hidden');
-            }
-        }
+    // Meta row: player identity (tap → own profile) + running score
+    const playerEl = document.getElementById('tracker-player');
+    const scoreEl = document.getElementById('tracker-score');
+    const ratings = Object.values(rounds)
+        .filter((r) => r.ownRating)
+        .map((r) => r.ownRating);
+    const rating = ratings.length ? ratings[ratings.length - 1] : null;
+    if (playerEl) {
+        const first = (CONFIG.playerName || '').split(/\s+/)[0];
+        playerEl.textContent = rating ? `${first} · ${rating}` : first;
+        playerEl.dataset.name = CONFIG.playerName || '';
+        playerEl.title = 'View your profile';
+    }
+    if (scoreEl) {
+        const { score, played } = playerScore(rounds);
+        scoreEl.innerHTML = played ? `<b>${fmtScore(score)}</b> / ${played}` : '';
     }
 
+    container.innerHTML = buildTrackerCellsHtml(rounds, totalRounds, currentRound, currentState, selectedRound);
     container.dataset.active = selectedRound || '';
+
+    const detailEl = document.getElementById('tracker-expanded');
+    if (detailEl) {
+        const meta = getTournamentMeta();
+        detailEl.innerHTML = selectedRound
+            ? buildTrackerDetailHtml(selectedRound, rounds[selectedRound], meta.roundDates, currentState)
+            : '';
+    }
+
+    renderPairingPill(rounds, totalRounds, currentRound, currentState);
 }
 
-// Tab click handler (static — buttons exist in HTML)
+function renderPairingPill(rounds, totalRounds, currentRound, state) {
+    const el = document.getElementById('pairing-section');
+    if (!el) return;
+
+    const pairing = getAppState().pairing;
+    const meta = getTournamentMeta();
+    const isFinal = state === STATE.RESULTS && totalRounds > 0 && currentRound >= totalRounds;
+
+    if (isFinal) {
+        el.innerHTML = buildResultsPillHtml(rounds, totalRounds);
+        el.classList.remove('hidden');
+    } else if (pairing && (state === STATE.YES || state === STATE.IN_PROGRESS)) {
+        const ratings = Object.values(rounds)
+            .filter((r) => r.ownRating)
+            .map((r) => r.ownRating);
+        const rating = ratings.length ? ratings[ratings.length - 1] : null;
+        el.innerHTML = buildPairingPillHtml(pairing, CONFIG.playerName || 'You', rating, currentRound, meta.roundDates);
+        el.classList.remove('hidden');
+    } else {
+        el.innerHTML = '';
+        el.classList.add('hidden');
+    }
+}
+
+// Cell click → expand round; ✕ → collapse. (Static container in HTML.)
 if (typeof document !== 'undefined') {
-    document.getElementById('round-tracker')?.addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-clickable]');
-        if (!btn) return;
-        document.getElementById('round-tracker').dataset.active = btn.dataset.round;
+    document.getElementById('tracker-section')?.addEventListener('click', (e) => {
+        if (!_lastTracker) return;
+        const { rounds, totalRounds, currentRound, currentState } = _lastTracker;
+        const closeBtn = e.target.closest('[data-action="tracker-close"]');
+        const cell = e.target.closest('.tracker-cell[data-clickable]');
+        if (!closeBtn && !cell) return;
+        const active = document.getElementById('round-tracker')?.dataset.active;
+        const next = closeBtn || (cell && cell.dataset.round === active) ? null : Number(cell.dataset.round);
+        renderRoundTracker(rounds, totalRounds, currentRound, currentState, next);
     });
 }
 
@@ -399,10 +608,11 @@ export function showError(message) {
     document.getElementById('check-btn').disabled = false;
 
     setHtmlClass('no');
-    document.getElementById('answer').textContent = '???';
-    document.getElementById('meme').innerHTML = `
-        <p class="meme-text">Couldn't check the page. Maybe try opening it directly?</p>
-        <p class="meme-text meme-text-small">${message}</p>
+    updateTopbar(null);
+    renderAnswer('???', null);
+    document.getElementById('home-extra').innerHTML = `
+        <p class="home-error">Couldn't check the page. Maybe try opening it directly?</p>
+        <p class="home-error home-error-small">${esc(message)}</p>
     `;
     document.getElementById('round-info').textContent = '';
 }

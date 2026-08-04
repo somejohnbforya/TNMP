@@ -111,25 +111,31 @@ export function renderStandings(mountEl) {
 
     const bodyHtml = sections
         .map((sec) => {
-            const sectionRow = `<tr class="std-section-row"><td colspan="${colspan}">${escapeHtml(sec.section)}</td></tr>`;
+            // Label is sticky-left inside the colspan cell so it stays
+            // readable while the table scrolls horizontally.
+            const sectionRow = `<tr class="std-section-row"><td colspan="${colspan}"><span class="std-section-label">${escapeHtml(sec.section)}</span></td></tr>`;
             const rows = renderSectionRows(sec, numRounds, games);
             return `<tbody class="std-section">${sectionRow}${rows}</tbody>`;
         })
         .join('');
 
+    // The card is the scroll container: sticky header/columns pin to its
+    // rounded edges, so the frame around it can use normal panel padding.
     mountEl.innerHTML = `
-        <table class="standings-table">
-            <thead>
-                <tr>
-                    <th class="std-th-rank">#</th>
-                    <th class="std-th-name">Player</th>
-                    <th class="std-th-rating">Rating</th>
-                    ${headerCells.join('')}
-                    <th class="std-th-total">Total</th>
-                </tr>
-            </thead>
-            ${bodyHtml}
-        </table>
+        <div class="standings-card raised-panel">
+            <table class="standings-table">
+                <thead>
+                    <tr>
+                        <th class="std-th-rank">#</th>
+                        <th class="std-th-name">Player</th>
+                        <th class="std-th-rating">Rating</th>
+                        ${headerCells.join('')}
+                        <th class="std-th-total">Total</th>
+                    </tr>
+                </thead>
+                ${bodyHtml}
+            </table>
+        </div>
     `;
 }
 

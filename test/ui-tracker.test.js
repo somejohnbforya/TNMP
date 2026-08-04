@@ -1,139 +1,138 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { renderRoundTracker } from '../src/ui.js';
+import { describe, it, expect } from 'vitest';
+import {
+    playerScore,
+    buildTrackerCellsHtml,
+    buildTrackerDetailHtml,
+    buildPairingPillHtml,
+    buildResultsPillHtml,
+} from '../src/ui.js';
 import { STATE } from '../src/config.js';
 
-// The test env is `node` (no DOM), so we supply a tiny faithful DOM covering
-// exactly the selectors/mutations renderRoundTracker uses. This reproduces the
-// real production crash: the round tracker selected the opponent button by its
-// `.opponent-link` class, but the bye branch *removes* that class for styling —
-// so any re-render after a bye rendered once couldn't re-find the button and
-// threw "Cannot set properties of null (setting 'textContent')".
+// The scoreboard renderers are pure (data in, HTML out) so they're tested
+// as string builders — no DOM shim needed. The thin DOM glue in ui.js is
+// exercised in the browser.
 
-class ClassList {
-    constructor(el) { this.el = el; }
-    add(...c) { c.forEach((x) => this.el._classes.add(x)); }
-    remove(...c) { c.forEach((x) => this.el._classes.delete(x)); }
-    contains(c) { return this.el._classes.has(c); }
-    toggle(c, f) { if (f) this.el._classes.add(c); else this.el._classes.delete(c); }
-}
+const ROUNDS = {
+    1: { color: 'White', opponent: 'Alice Aa', opponentRating: 1500, result: 'W', isBye: false, gameId: 'g1', board: 3, ownRating: 1740 },
+    2: { color: 'Black', opponent: 'Bob Bb', opponentRating: 1600, result: 'L', isBye: false, gameId: 'g2', board: 5, ownRating: 1741 },
+    3: { color: 'White', opponent: 'Cara Cc', opponentRating: 1550, result: 'D', isBye: false, gameId: 'g3', board: 4, ownRating: 1742 },
+    4: { isBye: true, byeType: 'half', result: 'H' },
+    5: { color: 'Black', opponent: 'Carl Anthony Pickering', opponentRating: 1758, result: null, isBye: false, gameId: null, board: 18 },
+};
 
-class El {
-    constructor(tag) {
-        this.tagName = tag.toUpperCase();
-        this._classes = new Set();
-        this.attrs = {};
-        this.children = [];
-        this._text = '';
-        this.dataset = {};
-        this.classList = new ClassList(this);
-        this.addEventListener = () => {};
-    }
-    set className(v) { this._classes = new Set(String(v).split(/\s+/).filter(Boolean)); }
-    get className() { return [...this._classes].join(' '); }
-    set textContent(v) { this._text = v; }
-    get textContent() { return this._text; }
-    set innerHTML(v) { this._html = v; }
-    get innerHTML() { return this._html; }
-    setAttribute(k, v) {
-        if (k.startsWith('data-')) this.dataset[k.slice(5).replace(/-(\w)/g, (_, c) => c.toUpperCase())] = v;
-        this.attrs[k] = v;
-    }
-    getAttribute(k) { return this.attrs[k]; }
-    removeAttribute(k) { delete this.attrs[k]; }
-    toggleAttribute(k, f) { if (f) this.attrs[k] = ''; else delete this.attrs[k]; }
-    append(c) { c.parent = this; this.children.push(c); }
-    _all() {
-        const out = [];
-        const walk = (e) => { for (const c of e.children) { out.push(c); walk(c); } };
-        walk(this);
-        return out;
-    }
-    _matches(sel) {
-        const m = sel.match(/^\.([\w-]+)(?:\[data-([\w-]+)="([^"]+)"\])?$/);
-        if (!m) return false;
-        if (!this._classes.has(m[1])) return false;
-        if (m[2] !== undefined && this.dataset[m[2].replace(/-(\w)/g, (_, c) => c.toUpperCase())] !== m[3]) return false;
-        return true;
-    }
-    querySelector(sel) {
-        const parts = sel.trim().split(/\s+/);
-        if (parts.length === 1) return this._all().find((e) => e._matches(parts[0])) || null;
-        const [a, b] = parts; // e.g. ".pairing-opponent button"
-        for (const anc of this._all()) {
-            if (!anc._matches(a)) continue;
-            const hit = anc._all().find((e) => (b === 'button' ? e.tagName === 'BUTTON' : e._matches(b)));
-            if (hit) return hit;
-        }
-        return null;
-    }
-}
+const ROUND_DATES = [
+    '2026-07-07T18:30:00-07:00',
+    '2026-07-14T18:30:00-07:00',
+    '2026-07-21T18:30:00-07:00',
+    '2026-07-28T18:30:00-07:00',
+    '2026-08-04T18:30:00-07:00',
+    '2026-08-11T18:30:00-07:00',
+    '2026-08-18T18:30:00-07:00',
+];
 
-// Mirrors index.html's tracker markup (7 round tabs + detail panels).
-function buildTrackerDom() {
-    const root = new El('div');
-    const section = new El('div'); section.attrs.id = 'tracker-section';
-    const container = new El('div'); container.attrs.id = 'round-tracker';
-    root.append(section); root.append(container);
-    for (let i = 1; i <= 7; i++) {
-        const tab = new El('button'); tab.className = 'tracker-round'; tab.setAttribute('data-round', String(i)); container.append(tab);
-        const panel = new El('div'); panel.className = 'tracker-detail'; panel.setAttribute('data-round', String(i)); container.append(panel);
-        panel.append(Object.assign(new El('div'), { className: 'pairing-history-label' }));
-        const res = new El('div'); res.className = 'pairing-result'; panel.append(res);
-        const opp = new El('div'); opp.className = 'pairing-opponent'; panel.append(opp);
-        const img = new El('img'); img.className = 'color-icon'; opp.append(img);
-        const btn = new El('button'); btn.className = 'opponent-link'; btn.setAttribute('data-action', 'open-profile'); opp.append(btn);
-        const vg = new El('button'); vg.className = 'view-game-btn'; vg.setAttribute('data-action', 'view-tracker-game'); panel.append(vg);
-    }
-    return root;
-}
-
-function findPanel(root, round) {
-    return root._all().find((e) => e._classes.has('tracker-detail') && e.dataset.round === String(round));
-}
-
-describe('renderRoundTracker', () => {
-    afterEach(() => { delete global.document; });
-
-    function mount() {
-        const root = buildTrackerDom();
-        global.document = {
-            getElementById: (id) => root._all().find((e) => e.attrs.id === id) || null,
-        };
-        return root;
-    }
-
-    const games = {
-        1: { color: 'White', opponent: 'A', result: 'W', isBye: false, gameId: '1' },
-        2: { color: 'Black', opponent: 'B', result: 'L', isBye: false, gameId: '2' },
-        3: { color: 'White', opponent: 'C', result: 'D', isBye: false, gameId: '3' },
-        4: { isBye: true, byeType: 'half', result: 'H' },
-    };
-
-    it('renders a half-point bye label', () => {
-        const root = mount();
-        renderRoundTracker(games, 7, 4, STATE.RESULTS, 4);
-        expect(findPanel(root, 4).querySelector('.pairing-opponent button').textContent).toBe('Half-point bye');
+describe('playerScore', () => {
+    it('scores wins, draws, and byes', () => {
+        // W(1) + L(0) + D(0.5) + half-bye(0.5); round 5 unplayed
+        expect(playerScore(ROUNDS)).toEqual({ score: 2, played: 4 });
     });
 
-    it('does not crash on re-render after a bye (regression: stripped .opponent-link)', () => {
-        const root = mount();
-        expect(() => {
-            renderRoundTracker(games, 7, 4, STATE.RESULTS, 4); // strips opponent-link on R4
-            renderRoundTracker(games, 7, 4, STATE.RESULTS, 4); // re-render — used to throw
-        }).not.toThrow();
-        expect(findPanel(root, 4).querySelector('.pairing-opponent button').textContent).toBe('Half-point bye');
+    it('handles empty rounds', () => {
+        expect(playerScore({})).toEqual({ score: 0, played: 0 });
+    });
+});
+
+describe('buildTrackerCellsHtml', () => {
+    it('renders one cell per round with result classes', () => {
+        const html = buildTrackerCellsHtml(ROUNDS, 7, 5, STATE.YES, null);
+        expect(html.match(/tracker-cell/g)).toHaveLength(7);
+        expect(html).toContain('tb-w');
+        expect(html).toContain('tb-l');
+        expect(html).toContain('tb-d');
+        expect(html).toContain('tb-bye');
+        expect(html).toContain('tb-x'); // rounds 6-7 unplayed
     });
 
-    it('survives a bye round becoming a game (and vice versa) across re-renders', () => {
-        const root = mount();
-        renderRoundTracker(games, 7, 4, STATE.RESULTS, 4);
-        const swapped = {
-            ...games,
-            3: { isBye: true, byeType: 'half', result: 'H' },
-            4: { color: 'White', opponent: 'D', result: 'W', isBye: false, gameId: '4' },
-        };
-        expect(() => renderRoundTracker(swapped, 7, 4, STATE.RESULTS, 4)).not.toThrow();
-        expect(findPanel(root, 4).querySelector('.pairing-opponent button').textContent).toBe('D');
-        expect(findPanel(root, 3).querySelector('.pairing-opponent button').textContent).toBe('Half-point bye');
+    it('marks the live round and the selected round', () => {
+        const html = buildTrackerCellsHtml(ROUNDS, 7, 5, STATE.YES, 2);
+        expect(html).toContain('tb-live');
+        expect(html).toContain('tb-selected');
+    });
+
+    it('uses the duck for byes and piece icons for played colors', () => {
+        const html = buildTrackerCellsHtml(ROUNDS, 7, 5, STATE.RESULTS, null);
+        expect(html).toContain('Duck.svg');
+        expect(html).toContain('wK.svg');
+        expect(html).toContain('bK.svg');
+    });
+});
+
+describe('buildTrackerDetailHtml', () => {
+    it('renders result verb, opponent piece color, and view-game button', () => {
+        const html = buildTrackerDetailHtml(1, ROUNDS[1], ROUND_DATES, STATE.RESULTS);
+        expect(html).toContain('You won');
+        expect(html).toContain('bK.svg'); // opponent of a White game
+        expect(html).toContain('Alice Aa');
+        expect(html).toContain('data-game-id="g1"');
+        expect(html).toContain('Round 1 · Board 3');
+    });
+
+    it('renders a half-point bye', () => {
+        const html = buildTrackerDetailHtml(4, ROUNDS[4], ROUND_DATES, STATE.RESULTS);
+        expect(html).toContain('Half-point bye');
+        expect(html).toContain('Duck.svg');
+        expect(html).not.toContain('view-game-btn');
+    });
+
+    it('renders a live unfinished round without a verb or game link', () => {
+        const html = buildTrackerDetailHtml(5, ROUNDS[5], ROUND_DATES, STATE.YES);
+        expect(html).toContain('Playing tonight');
+        expect(html).not.toContain('view-game-btn');
+    });
+
+    it('escapes HTML in names', () => {
+        const evil = { ...ROUNDS[1], opponent: '<img onerror=x>' };
+        const html = buildTrackerDetailHtml(1, evil, ROUND_DATES, STATE.RESULTS);
+        expect(html).not.toContain('<img onerror');
+        expect(html).toContain('&lt;img onerror=x&gt;');
+    });
+});
+
+describe('buildPairingPillHtml', () => {
+    const pairing = { board: 18, color: 'Black', opponent: 'Carl Anthony Pickering', opponentRating: 1758 };
+
+    it('shows both surnames with the correct piece per side', () => {
+        const html = buildPairingPillHtml(pairing, 'John Boyer', 1743, 5, ROUND_DATES);
+        // You play Black → your side gets bK, opponent side gets wK
+        const you = html.slice(html.indexOf('pp-you'), html.indexOf('pp-seam'));
+        const opp = html.slice(html.indexOf('pp-opp'));
+        expect(you).toContain('bK.svg');
+        expect(you).toContain('Boyer');
+        expect(you).toContain('1743');
+        expect(opp).toContain('wK.svg');
+        expect(opp).toContain('Pickering');
+        expect(opp).toContain('1758');
+        expect(html).toContain('Round 5 · Board 18');
+    });
+
+    it('links the opponent to their profile with the full name', () => {
+        const html = buildPairingPillHtml(pairing, 'John Boyer', 1743, 5, ROUND_DATES);
+        expect(html).toContain('data-action="open-profile"');
+        expect(html).toContain('data-name="Carl Anthony Pickering"');
+    });
+
+    it('renders a bye pill with the duck', () => {
+        const html = buildPairingPillHtml({ isBye: true, byeType: 'full' }, 'John Boyer', 1743, 5, ROUND_DATES);
+        expect(html).toContain('Full-point bye');
+        expect(html).toContain('Duck.svg');
+        expect(html).not.toContain('pp-seam');
+    });
+});
+
+describe('buildResultsPillHtml', () => {
+    it('counts wins, draws, and losses', () => {
+        const html = buildResultsPillHtml(ROUNDS, 7);
+        expect(html).toContain('Final · 7 rounds');
+        const nums = [...html.matchAll(/rp-num">(\d+)</g)].map((m) => Number(m[1]));
+        expect(nums).toEqual([1, 1, 1]); // 1W, 1D, 1L (bye + unplayed excluded)
     });
 });

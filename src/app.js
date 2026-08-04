@@ -149,6 +149,7 @@ function buildTrackerRounds(games, byes, playerNorm) {
             color: isWhite ? 'White' : 'Black',
             opponent: isWhite ? g.black : g.white,
             opponentRating: isWhite ? g.blackElo : g.whiteElo,
+            ownRating: isWhite ? g.whiteElo : g.blackElo,
             board: g.board,
             gameId: g.gameId,
             result,
@@ -176,13 +177,30 @@ function buildTrackerRounds(games, byes, playerNorm) {
 // --- Main check logic ---
 
 function renderTracker(trackerRounds, totalRounds, roundNumber, state) {
+    // Player-level pairing info — consumed by the pairing pill and the
+    // share text. Derived here (not in renderState) so the fresh-tracker
+    // path keeps it current when the tournament state hasn't changed.
+    const currentRound = trackerRounds?.[roundNumber];
+    if (currentRound && !currentRound.isBye) {
+        updateAppState({
+            pairing: {
+                board: currentRound.board,
+                color: currentRound.color,
+                opponent: currentRound.opponent,
+                opponentRating: currentRound.opponentRating,
+                playerResult: currentRound.result || null,
+            },
+        });
+    } else if (currentRound?.isBye) {
+        updateAppState({ pairing: { isBye: true, byeType: currentRound.byeType } });
+    } else {
+        updateAppState({ pairing: null });
+    }
+
     if (state === 'off_season' || !CONFIG.playerName || !Object.keys(trackerRounds).length) return;
-    const isLive = state === STATE.YES || state === STATE.IN_PROGRESS;
-    const activeRounds = Object.entries(trackerRounds)
-        .filter(([, r]) => r.result || r.color || r.opponent)
-        .map(([n]) => Number(n));
-    const autoSelect = isLive && roundNumber ? roundNumber : activeRounds.length ? Math.max(...activeRounds) : null;
-    renderRoundTracker(trackerRounds, totalRounds || 7, roundNumber, state, autoSelect);
+    // Collapsed by default — the pairing pill carries the current round,
+    // played rounds expand on tap.
+    renderRoundTracker(trackerRounds, totalRounds || 7, roundNumber, state, null);
 }
 
 function renderState(stateData, trackerRounds) {
@@ -205,29 +223,10 @@ function renderState(stateData, trackerRounds) {
 
     // Tournament-level facts (state, current round, info text) are set together,
     // once. They describe where the tournament is — independent of any player —
-    // so they don't belong in the per-player pairing branches below. (Round
-    // living in those branches is what let the bye path leave the headline at
-    // its default of 1.)
+    // so they don't belong in per-player pairing logic (which lives in
+    // renderTracker, on both render paths).
     updateAppState({ state, round: roundNumber, roundInfo: info || '' });
     if (state !== 'no') stopCountdown();
-
-    // Player-level pairing info — consumed only by the share text.
-    const currentRound = trackerRounds?.[roundNumber];
-    if (currentRound && !currentRound.isBye) {
-        updateAppState({
-            pairing: {
-                board: currentRound.board,
-                color: currentRound.color,
-                opponent: currentRound.opponent,
-                opponentRating: currentRound.opponentRating,
-                playerResult: currentRound.result || null,
-            },
-        });
-    } else if (currentRound?.isBye) {
-        updateAppState({ pairing: { isBye: true, byeType: currentRound.byeType } });
-    } else {
-        updateAppState({ pairing: null });
-    }
 
     if (state === 'off_season') {
         const r1 = meta.roundDates?.[0];
@@ -288,6 +287,15 @@ async function checkPairings() {
         }
     } catch {
         /* network failure */
+    }
+
+    // Dev-only state preview: ?mockState=yes|no|too_early|in_progress|results|off_season
+    // (+ optional &mockRound=N) forces the state machine while keeping all data real.
+    if (import.meta.env.DEV && serverState) {
+        const params = new URLSearchParams(location.search);
+        const mock = params.get('mockState');
+        const mockRound = Number(params.get('mockRound'));
+        if (mock) serverState = { ...serverState, state: mock, round: mockRound || serverState.round || 4 };
     }
 
     if (!serverState) {
@@ -718,7 +726,10 @@ async function handleShareAction(action) {
             showToast('Could not copy to clipboard', 'error');
         }
     } else if (action === 'download') {
-        const slug = getTournamentMeta().slug;
+        // Name by the game's own tournament, not the app's current TNM —
+        // locally-imported games have no GameId and fall through to
+        // White-Black-Date.
+        const slug = getCachedGame(getHeader(pgn, 'GameId'))?.tournamentSlug;
         const w = getHeader(pgn, 'White')?.split(',')[0] || 'White';
         const b = getHeader(pgn, 'Black')?.split(',')[0] || 'Black';
         const r = getHeader(pgn, 'Round')?.split('.')[0];
@@ -756,8 +767,6 @@ function handleBrowserExport() {
         showToast('No PGN data available', 'error');
         return;
     }
-    const slug = getTournamentMeta().slug;
-    const prefix = slug || 'games';
     let filename;
     const playerName = getPlayer();
     if (playerName) {
@@ -768,7 +777,12 @@ function handleBrowserExport() {
         if (c) parts.push(c.charAt(0).toUpperCase() + c.slice(1));
         filename = parts.join('-') + '.pgn';
     } else {
-        filename = `${prefix}-R${games[0]?.round || 'all'}.pgn`;
+        // Name by the exported games' own tournament — imports and mixed
+        // collections have no single slug and fall back to a generic name.
+        const slugs = new Set(games.map((g) => g.tournamentSlug).filter(Boolean));
+        const prefix = slugs.size === 1 ? slugs.values().next().value : 'games';
+        const round = getFilter('round');
+        filename = round ? `${prefix}-R${round}.pgn` : `${prefix}.pgn`;
     }
     downloadPgn(games.map((g) => g.pgn).join('\n\n'), filename);
     showToast(`${games.length} game${games.length > 1 ? 's' : ''} exported`, 'success');

@@ -1,7 +1,44 @@
 @import '@lichess-org/chessground/assets/chessground.base.css';
 @import '@lichess-org/chessground/assets/chessground.cburnett.css';
 
+/* Self-hosted webfonts (no third-party requests — see privacy policy).
+   Variable weight files: one woff2 covers 100-900. */
+@font-face {
+    font-family: 'Geist';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('/fonts/geist-latin-wght-normal.woff2') format('woff2-variations');
+}
+@font-face {
+    font-family: 'Geist Mono';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('/fonts/geist-mono-latin-wght-normal.woff2') format('woff2-variations');
+}
+@font-face {
+    font-family: 'Instrument Serif';
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/instrument-serif-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+    font-family: 'Instrument Serif';
+    font-style: italic;
+    font-weight: 400;
+    font-display: swap;
+    src: url('/fonts/instrument-serif-latin-400-italic.woff2') format('woff2');
+}
+
 .tnmp {
+    /* ── Type stack (home screen; other surfaces adopt per-screen as the
+       redesign lands) ─────────────────────────────────────────────── */
+    --font-sans: 'Geist', -apple-system, 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', monospace;
+    --font-serif: 'Instrument Serif', 'Times New Roman', serif;
+
     color-scheme: dark;
 
     /* ── Base colors (themes override these) ─────────────── */
@@ -259,7 +296,6 @@ html.tnmp {
     text-overflow: ellipsis;
 }
 
-.tracker-round,
 .move,
 .move-variation,
 .editor-h-btn,
@@ -271,7 +307,6 @@ html.tnmp {
 
 .off-season-countdown-label,
 .countdown-label,
-.pairing-history-label,
 .profile-section-title {
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -332,9 +367,9 @@ body.tnmp::before {
 .container {
     position: relative;
     z-index: 1;
-    text-align: center;
-    padding: 2rem;
-    max-width: 800px;
+    text-align: left;
+    padding: 2rem 1.25rem;
+    max-width: 480px;
     width: 100%;
 }
 
@@ -366,24 +401,12 @@ html.off-season {
     background: linear-gradient(135deg, var(--gradient-off-season-start) 0%, var(--gradient-off-season-end) 100%);
 }
 
-/* Dark mode: solid background + colored answer text */
+/* Dark mode: near-black scoreboard base; the answer letters carry the
+   state color (tinted meme texture rendered by ui.js). */
 html.dark-mode.yes, html.dark-mode.no, html.dark-mode.loading-state,
 html.dark-mode.too-early, html.dark-mode.in-progress,
 html.dark-mode.results, html.dark-mode.off-season {
-    background: #1a1a1a;
-}
-html.dark-mode.yes .answer { color: var(--gradient-yes-start); text-shadow: 0 0 40px rgb(from var(--accent) r g b /0.3); }
-html.dark-mode.no .answer { color: var(--gradient-no-start); text-shadow: 0 0 40px rgb(from var(--status-error) r g b /0.3); }
-html.dark-mode.loading-state .answer { color: var(--gradient-loading-end); }
-html.dark-mode.too-early .answer { color: var(--gradient-too-early-end); text-shadow: 0 0 40px rgba(156, 39, 176, 0.3); }
-html.dark-mode.in-progress .answer { color: var(--gradient-in-progress-end); text-shadow: 0 0 40px rgba(66, 165, 245, 0.3); }
-html.dark-mode.results .answer { color: var(--gradient-results-start); text-shadow: 0 0 40px rgba(245, 124, 0, 0.3); }
-html.dark-mode.off-season .answer { color: var(--gradient-off-season-end); text-shadow: 0 0 40px rgba(123, 168, 98, 0.3); }
-
-/* Off-season: let the meme container expand for the countdown */
-html.off-season .meme {
-    max-width: 520px;
-    min-height: auto;
+    background: #0d0d0f;
 }
 
 /* Off-season countdown */
@@ -428,11 +451,61 @@ html.off-season .meme {
     margin-top: 0.35rem;
 }
 
-.title {
-    font-size: 3rem;
-    color: var(--text-primary);
-    text-shadow: var(--shadow-text);
-    margin-bottom: 2rem;
+/* ── Home scoreboard chrome (design: v1-scoreboard) ──────────────── */
+
+.container {
+    font-family: var(--font-sans);
+}
+
+.loading,
+.refresh-container {
+    text-align: center;
+}
+
+.home-topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgb(from var(--text-primary) r g b / 0.75);
+    padding: 0 0.25rem;
+}
+
+.home-live {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+}
+
+.home-live.hidden {
+    display: none;
+}
+
+.live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 3px rgb(from var(--text-primary) r g b / 0.25);
+    animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+    50% { opacity: 0.45; }
+}
+
+.home-prompt {
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: rgb(from var(--text-primary) r g b / 0.92);
+    text-align: left;
+    margin: 0.9rem 0 0.25rem;
+    padding: 0 0.25rem;
 }
 
 .loading {
@@ -474,208 +547,481 @@ html.off-season .meme {
     }
 }
 
-.answer {
-    font-size: 22rem;
-    font-weight: 900;
-    color: var(--text-primary);
-    text-shadow: 4px 4px 8px var(--shadow-color);
-    line-height: 1;
-    margin: 1rem auto 2.5rem;
-    white-space: nowrap;
-    text-align: center;
+/* Fluid answer — SVG text sized by viewBox, spans the column at any length */
+.answer-fit {
+    margin: 0.25rem 0 0.4rem;
+    line-height: 0;
 }
 
-.meme {
-    max-width: 400px;
+.answer-svg {
+    display: block;
     width: 100%;
-    margin: 1rem auto;
-    min-height: 200px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    height: auto;
+    overflow: visible;
+    font-family: var(--font-sans);
+}
+
+html:not(.dark-mode) .answer-svg {
+    filter: drop-shadow(0 3px 14px rgba(0, 0, 0, 0.4));
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.home-sub {
+    font-size: 0.9rem;
+    line-height: 1.3;
+    color: rgb(from var(--text-primary) r g b / 0.9);
+    max-width: 320px;
+    margin: 0 0 0.9rem;
+    padding: 0 0.25rem;
+}
+
+/* Meme card + caption — the personality section, back by popular demand */
+.meme {
+    margin-top: 1.1rem;
+}
+
+.meme.hidden {
+    display: none;
 }
 
 .meme img {
     width: 100%;
     height: auto;
-    border-radius: 12px;
-    box-shadow: var(--shadow-md);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    display: block;
 }
 
 .meme-text {
-    font-size: 1.5rem;
-    color: var(--text-primary);
-    margin-top: 1rem;
+    font-family: var(--font-serif);
     font-style: italic;
-    text-shadow: 1px 1px 2px var(--shadow-color);
+    font-size: 1.15rem;
+    line-height: 1.3;
+    color: rgb(from var(--text-primary) r g b / 0.92);
+    text-align: center;
+    margin: 0.6rem 0 0;
 }
 
-.meme-text-small {
-    font-size: 0.9rem;
-    margin-top: 0.5rem;
-}
-
-.round-info {
-    font-size: 1.2rem;
-    color: rgba(255, 255, 255, 0.9);
+.home-extra {
     margin-top: 1rem;
 }
 
-/* Merged tracker + detail section */
-.tracker-section {
-    background: var(--overlay-dark);
-    border-radius: var(--radius-card);
-    padding: 1rem 1.25rem;
-    margin: 1rem auto;
-    max-width: 400px;
-    text-align: center;
-    overflow: hidden;
+.home-error {
+    font-size: 1.05rem;
+    font-style: italic;
+    color: var(--text-primary);
+    margin: 0.75rem 0 0;
 }
+
+.home-error-small {
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    color: var(--text-subtle);
+}
+
+/* ── Tracker bar: contiguous result cells + score header ─────────── */
 
 .tracker-section.hidden {
     display: none;
 }
 
-.tracker-detail {
-    display: none;
-    text-align: center;
-    padding-top: 0.75rem;
-}
-
-/* Tab switching: show active panel, highlight active tab */
-[data-active="1"] > .tracker-detail[data-round="1"],
-[data-active="2"] > .tracker-detail[data-round="2"],
-[data-active="3"] > .tracker-detail[data-round="3"],
-[data-active="4"] > .tracker-detail[data-round="4"],
-[data-active="5"] > .tracker-detail[data-round="5"],
-[data-active="6"] > .tracker-detail[data-round="6"],
-[data-active="7"] > .tracker-detail[data-round="7"] { display: block; }
-
-[data-active="1"] > .tracker-row > [data-round="1"],
-[data-active="2"] > .tracker-row > [data-round="2"],
-[data-active="3"] > .tracker-row > [data-round="3"],
-[data-active="4"] > .tracker-row > [data-round="4"],
-[data-active="5"] > .tracker-row > [data-round="5"],
-[data-active="6"] > .tracker-row > [data-round="6"],
-[data-active="7"] > .tracker-row > [data-round="7"] { box-shadow: inset 0 -3px 0 var(--text-link-hover); }
-
-.pairing-result {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 0.75rem;
-}
-
-.pairing-opponent {
-    font-size: 1.4rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
+.tracker-meta {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgb(from var(--text-primary) r g b / 0.7);
+    margin-bottom: 0.4rem;
+    padding: 0 2px;
 }
 
-.color-icon {
-    width: 2.5rem;
-    height: 2.5rem;
-    object-fit: contain;
-}
-
-.pairing-opponent .opponent-link {
-    color: var(--text-primary);
-    text-decoration: underline;
-    text-underline-offset: 2px;
+.tracker-player {
     background: none;
     border: none;
-    font: inherit;
-    font-size: inherit;
-    font-weight: inherit;
-    cursor: pointer;
     padding: 0;
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: rgb(from var(--text-primary) r g b / 0.35);
+    text-underline-offset: 3px;
 }
 
-.pairing-opponent .opponent-link:hover {
-    color: var(--text-link-hover);
-}
-
-/* Round Tracker */
-.tracker-row {
-    display: flex;
-    margin: -1rem -1.25rem 0;
-}
-
-.tracker-round {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.5rem 0;
-    border-radius: 0;
-    border: none;
-    border-right: 1px solid var(--overlay-light);
-    background: rgba(0, 0, 0, 0.15);
-    cursor: default;
-    font-family: inherit;
+.tracker-player:hover {
     color: var(--text-primary);
 }
 
-.tracker-round:last-child {
+.tracker-score {
+    color: rgb(from var(--text-primary) r g b / 0.45);
+    font-variant-numeric: tabular-nums;
+}
+
+.tracker-score b {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.72rem;
+}
+
+.tracker-bar {
+    display: flex;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+.tracker-cell {
+    all: unset;
+    flex: 1;
+    aspect-ratio: 1 / 1.15;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid rgba(0, 0, 0, 0.35);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+}
+
+.tracker-cell:last-child {
     border-right: none;
 }
 
-.tracker-round[data-clickable="true"] {
+.tracker-cell[data-clickable] {
     cursor: pointer;
 }
 
-.tracker-round[data-clickable="true"]:hover {
-    background: var(--overlay-light);
+.tracker-cell[data-clickable]:hover {
+    filter: brightness(1.12);
 }
 
+.tb-w { background: linear-gradient(180deg, #2fa64a 0%, #1a7a31 100%); }
+.tb-l { background: linear-gradient(180deg, #e53e3e 0%, #a31a1a 100%); }
+.tb-d { background: linear-gradient(180deg, #6a6a72 0%, #4a4a52 100%); }
+.tb-bye { background: linear-gradient(180deg, #5a5a62 0%, #3a3a42 100%); }
+.tb-x { background: linear-gradient(180deg, #2a2a30 0%, #1f1f25 100%); }
 
-.tracker-icon {
-    width: 2rem;
-    height: 2rem;
+.tb-selected {
+    box-shadow: inset 0 -3px 0 #fff, inset 0 0 0 1.5px rgba(255, 255, 255, 0.35);
+}
+
+.tb-live {
+    box-shadow: inset 0 -3px 0 #fff, inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.tb-num {
+    position: absolute;
+    top: 3px;
+    left: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.5rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.tb-piece {
+    width: 22px;
+    height: 22px;
     object-fit: contain;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
 }
 
-.tracker-number {
-    font-size: 0.9rem;
+.tb-live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.2);
+    animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+.tb-future-dot {
+    font-size: 1.1rem;
     font-weight: 600;
-    color: var(--text-subtle);
+    color: rgba(255, 255, 255, 0.3);
+    line-height: 1;
 }
 
-/* Result colors */
-.tracker-win {
-    background: rgba(76, 175, 80, 0.5);
+/* ── Expanded round detail card ──────────────────────────────────── */
+
+.tracker-detail-card {
+    margin-top: 0.6rem;
+    border-radius: var(--radius-sm);
+    padding: 0.9rem 1rem;
+    background: #1a1a1f;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    text-align: center;
+    animation: expand-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+    color: #fff;
 }
 
-.tracker-loss {
-    background: rgba(244, 67, 54, 0.5);
+@keyframes expand-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-.tracker-draw {
-    background: rgba(158, 158, 158, 0.35);
-}
-
-.tracker-bye {
-    background: rgba(158, 158, 158, 0.35);
-}
-
-
-/* Future rounds */
-.tracker-future {
-    opacity: 0.4;
-}
-
-/* History label in pairing info */
-.pairing-history-label {
+.td-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.45);
+    padding: 4px;
+    font-family: var(--font-mono);
     font-size: 0.85rem;
+    line-height: 1;
+}
+
+.td-close:hover {
+    color: #fff;
+}
+
+.td-meta {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    color: rgba(255, 255, 255, 0.62);
+    text-transform: uppercase;
+}
+
+.td-verb {
+    margin-top: 0.45rem;
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+}
+
+.td-verb-w { color: #5dd67c; }
+.td-verb-l { color: #ef6b6b; }
+.td-verb-d { color: #e0e0e0; }
+
+.td-opp {
+    margin-top: 0.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.td-piece {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+}
+
+.td-opp-text {
+    text-align: left;
+}
+
+.td-opp-name {
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: var(--font-sans);
+    font-size: 0.88rem;
     font-weight: 600;
-    color: var(--text-subtle);
-    margin-bottom: 0.5rem;
+    color: #fff;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.35);
+    text-underline-offset: 3px;
+}
+
+.td-opp-sub {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.55);
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+}
+
+/* ── Pairing pill (split bar: you | VS | opponent) ───────────────── */
+
+.pairing-section {
+    margin-top: 0.9rem;
+}
+
+.pairing-section.hidden {
+    display: none;
+}
+
+.pairing-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgb(from var(--text-primary) r g b / 0.7);
+    margin-bottom: 0.4rem;
+    padding: 0 2px;
+}
+
+.pairing-pill {
+    display: flex;
+    align-items: stretch;
+    border-radius: var(--radius-pill);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    min-height: 52px;
+    color: #fff;
+    /* Solid base so the translucent seam composites over the card,
+       not the page gradient behind it. */
+    background: #1c1c22;
+}
+
+.pp-side {
+    flex: 1;
+    min-width: 0;
+    background: linear-gradient(180deg, #28282e 0%, #1c1c22 100%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pp-you {
+    padding: 0 8px 0 16px;
+}
+
+.pp-opp {
+    padding: 0 16px 0 8px;
+}
+
+.pp-you .pp-info {
+    text-align: right;
+}
+
+.pp-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.pp-name {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-name-link {
+    display: block;
+    max-width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.35);
+    text-underline-offset: 3px;
+    text-align: left;
+}
+
+.pp-rating {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.55);
+    font-variant-numeric: tabular-nums;
+    margin-top: 1px;
+}
+
+.pp-piece {
+    width: 26px;
+    height: 26px;
+    object-fit: contain;
+    flex-shrink: 0;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+}
+
+.pp-seam {
+    width: 28px;
+    flex-shrink: 0;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(0, 0, 0, 0.5) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 0.56rem;
+    letter-spacing: 0.14em;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.55);
+    box-shadow: inset 1px 0 0 rgba(0, 0, 0, 0.35), inset -1px 0 0 rgba(0, 0, 0, 0.35);
+}
+
+.pairing-pill-bye {
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: linear-gradient(180deg, #28282e 0%, #1c1c22 100%);
+    padding: 0 16px;
+}
+
+.pp-bye-label {
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+/* ── Final results pill (W / D / L) ──────────────────────────────── */
+
+.results-pill {
+    display: flex;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    color: #fff;
+}
+
+.rp-seg {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.65rem 0;
+}
+
+.rp-w { background: linear-gradient(180deg, #2e7d32 0%, #1b5e20 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+.rp-d { background: linear-gradient(180deg, #4a4a52 0%, #32323a 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), inset 1px 0 0 rgba(0, 0, 0, 0.35), inset -1px 0 0 rgba(0, 0, 0, 0.35); }
+.rp-l { background: linear-gradient(180deg, #c62828 0%, #8e1f1f 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1); }
+
+.rp-num {
+    font-size: 1.4rem;
+    font-weight: 800;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.rp-label {
+    font-family: var(--font-mono);
+    font-size: 0.53rem;
+    letter-spacing: 0.13em;
+    color: rgba(255, 255, 255, 0.75);
+    text-transform: uppercase;
+    margin-top: 3px;
 }
 
 
@@ -690,20 +1036,27 @@ html.off-season .meme {
 .button-row {
     display: flex;
     flex-direction: row;
-    align-items: center;
-    gap: 0.75rem;
+    align-items: stretch;
+    gap: 0.6rem;
+    width: 100%;
+}
+
+.button-row > button {
+    flex: 1;
 }
 
 .check-btn {
-    padding: 1rem 2rem;
-    font-size: 1.2rem;
+    padding: 0.85rem 1.4rem;
+    font-size: 0.95rem;
     font-weight: 600;
-    color: #333;
-    background: var(--text-primary);
+    letter-spacing: -0.01em;
+    font-family: var(--font-sans);
+    color: #1a1a1a;
+    background: #fff;
     border: none;
     border-radius: var(--radius-pill);
     cursor: pointer;
-    box-shadow: 0 4px 15px rgb(from var(--shadow) r g b / 0.2);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.8);
     transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
@@ -717,14 +1070,17 @@ html.off-season .meme {
 }
 
 .share-btn {
-    padding: 0.75rem 1.5rem;
-    font-size: 1rem;
+    padding: 0.85rem 1.4rem;
+    font-size: 0.95rem;
     font-weight: 600;
+    letter-spacing: -0.01em;
+    font-family: var(--font-sans);
     color: var(--text-primary);
-    background: var(--overlay-light);
-    border: var(--border-share);
+    background: rgb(from var(--text-primary) r g b / 0.08);
+    border: 1.5px solid rgb(from var(--text-primary) r g b / 0.28);
     border-radius: var(--radius-pill);
     cursor: pointer;
+    box-shadow: var(--shadow-xs);
     transition: transform var(--transition-fast), background var(--transition-fast);
 }
 
@@ -817,11 +1173,14 @@ html.off-season .meme {
 }
 
 .countdown {
-    font-size: 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
     color: var(--text-subtle);
     background: rgba(0, 0, 0, 0.15);
     padding: 0.4rem 1rem;
     border-radius: var(--radius-card);
+    font-variant-numeric: tabular-nums;
 }
 
 #countdown-time {
@@ -894,6 +1253,11 @@ html.off-season .meme {
     to { opacity: 0; transform: translateY(-14px); }
 }
 
+/* fill:both is LOAD-BEARING on .viewer-tab-host: the held translateY(0)
+   creates a stacking context that keeps the host's chrome above the
+   positioned .modal-backdrop sibling. (The host also sets position:
+   relative for this — see the tab-bar block — but keep the fill so the
+   entry states never flash.) */
 .modal:not(.hidden):not(.closing) .modal-backdrop {
     animation: modal-backdrop-in 200ms ease-out both;
 }
@@ -2828,9 +3192,13 @@ button.viewer-close {
     z-index: 100;
 }
 
-[data-tooltip]:hover::after {
-    opacity: 1;
-    transition-delay: 0.5s;
+/* Hover-capable devices only — on touch, :hover sticks after a tap and
+   the tooltip parks itself over whatever sits below the button. */
+@media (hover: hover) {
+    [data-tooltip]:hover::after {
+        opacity: 1;
+        transition-delay: 0.5s;
+    }
 }
 
 [data-tooltip]:active::after {
@@ -2986,14 +3354,14 @@ button.viewer-close {
 /* View Game button in round detail */
 .view-game-btn {
     margin-top: 0.75rem;
-    padding: 0.5rem 1rem;
-    font-size: 0.9rem;
+    padding: 0.55rem 1.4rem;
+    font-size: 0.82rem;
     font-weight: 600;
-    font-family: inherit;
+    font-family: var(--font-sans);
     color: var(--text-primary);
     background: var(--overlay-light);
-    border: var(--border-subtle);
-    border-radius: var(--radius-sm);
+    border: 1px solid rgb(from var(--text-primary) r g b / 0.28);
+    border-radius: var(--radius-pill);
     cursor: pointer;
     transition: background var(--transition-fast), transform var(--transition-fast);
 }
@@ -3240,6 +3608,10 @@ button.viewer-close {
         flex-direction: column;
         max-height: 98vh;
         max-height: 98dvh;
+        /* Paint above the .modal-backdrop sibling explicitly — without
+           this, the host's gradient (and the tab bar on it) only stayed
+           on top via the entry animation's held transform. */
+        position: relative;
     }
     /* Tab-host owns the modal chrome only when a tab bar sits on top of it.
        Without the tab bar (single-tab embed), the modal-content-viewer
@@ -5165,24 +5537,11 @@ input.browser-search-input {
 @media (max-width: 600px) {
     /* Layout */
     .container { padding: 1rem; }
-    .button-row { flex-direction: column; }
-
-    /* Typography */
-    .title { font-size: 2rem; }
-    .meme-text { font-size: 1.1rem; }
-    .pairing-opponent { font-size: 1.2rem; }
-
-    /* Meme */
-    .meme { min-height: auto; }
-    .meme img { max-height: none; }
 
     /* Off-season countdown */
     .off-season-countdown { padding: 1.5rem 1.5rem; }
     .countdown-value { font-size: 2.5rem; }
     .off-season-countdown-units { gap: 1rem; }
-
-    /* Buttons */
-    .check-btn { padding: 0.75rem 1.5rem; font-size: 1rem; }
 
     /* Viewer — full-bleed on phone; panels handle their own internal padding. */
     .modal-content-viewer.browser-only h2 { padding: 1rem 1rem 0.5rem; }
@@ -5515,20 +5874,50 @@ input.browser-search-input {
     flex-direction: column;
     min-height: 0;
     flex: 1;
-    overflow-y: auto;
-    padding: 1.5rem 1.5rem 1.5rem 0.75rem;
+    /* The pane is a frame, not a scroller — the card inside scrolls. */
+    overflow: hidden;
+    padding: 0.75rem;
     box-sizing: border-box;
 }
 .viewer-standings.hidden { display: none; }
 
+@media (min-width: 1000px) {
+    /* Match viewer-main's panel margins; extra top clears the modal ✕. */
+    .viewer-standings {
+        padding: 3.5rem 1.5rem 1.5rem 0.75rem;
+    }
+}
+
+/* Shares .raised-panel chrome with the viewer's other panels. It is ALSO
+   the scroll container for both axes: sticky header (top), identity
+   columns (left), and total (right) pin to the card's rounded edges —
+   padding on a scrollport would become a see-through strip, so the card
+   has none and the cells' own padding provides the interior spacing. */
+.standings-card {
+    /* Solid stand-ins for the translucent raised-panel tones — sticky
+       cells must cover content scrolling beneath them, so alpha is out.
+       Composites match --raised-panel-bg over the modal surface.
+       References --modal-bg DIRECTLY (not --surface-primary): app schemes
+       set --modal-bg inline on the modal, and only a var() resolved at
+       this element picks that override up. */
+    --std-base: light-dark(
+        color-mix(in srgb, var(--modal-bg) 97%, var(--shadow)),
+        color-mix(in srgb, var(--modal-bg) 75%, var(--shadow))
+    );
+    --std-raised: color-mix(in srgb, var(--std-base) 90%, var(--foreground));
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    background: var(--std-base);
+    align-self: stretch;
+}
+
 .standings-table {
-    width: auto;
+    min-width: 100%;
     border-collapse: separate;
     border-spacing: 0;
     font-variant-numeric: tabular-nums;
-    background: var(--raised-panel-bg);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-xs);
+    background: var(--std-base);
 }
 .standings-table th,
 .standings-table td {
@@ -5538,12 +5927,13 @@ input.browser-search-input {
     border-bottom: 1px solid var(--border-color);
     box-sizing: border-box;
     height: 2rem;
+    background: var(--std-base);
 }
 .standings-table thead th {
     position: sticky;
     top: 0;
     z-index: 3;
-    background: var(--surface);
+    background: var(--std-raised);
     color: var(--text-muted);
     font-weight: 600;
     font-size: 0.75rem;
@@ -5551,13 +5941,12 @@ input.browser-search-input {
     letter-spacing: 0.04em;
     box-shadow: 0 1px 0 var(--border-color);
 }
-.standings-table tbody tr:hover:not(.std-section-row) { background: var(--surface-subtle); }
 
 .std-section-row td {
     position: sticky;
     top: 2rem;            /* sits directly under the header (which is 2rem tall) */
     z-index: 2;
-    background: var(--surface);
+    background: var(--std-raised);
     color: var(--text-muted);
     font-weight: 700;
     font-size: 0.75rem;
@@ -5567,12 +5956,41 @@ input.browser-search-input {
     padding-left: 0.75rem;
     box-shadow: 0 1px 0 var(--border-color);
 }
+.std-section-label {
+    display: inline-block;
+    position: sticky;
+    left: 0.75rem;
+}
 
+/* Identity columns stay put while rounds scroll horizontally.
+   Rank width is pinned hard — the name column's sticky offset assumes
+   exactly 2.25rem, and auto table layout would otherwise widen it. */
 .std-th-rank,
 .std-cell-rank {
+    position: sticky;
+    left: 0;
+    z-index: 1;
     width: 2.25rem;
+    min-width: 2.25rem;
+    max-width: 2.25rem;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
     color: var(--text-faint);
     font-weight: 600;
+}
+.std-th-name,
+.std-cell-name {
+    position: sticky;
+    left: 2.25rem;
+    z-index: 1;
+    box-shadow: 1px 0 0 var(--border-color);
+}
+/* Corner header cells sit above both scroll axes — needs the extra
+   specificity to beat the generic `thead th` z-index. */
+.standings-table thead .std-th-rank,
+.standings-table thead .std-th-name,
+.standings-table thead .std-th-total {
+    z-index: 4;
 }
 .std-th-name { text-align: left; }
 .std-cell-name {
@@ -5580,6 +5998,9 @@ input.browser-search-input {
     color: var(--text-primary);
     font-weight: 500;
     white-space: nowrap;
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .std-player-link {
     background: none;
@@ -5607,11 +6028,10 @@ input.browser-search-input {
     font-weight: 700;
     font-size: 0.8rem;
 }
-.std-cell-empty { background: transparent; }
-.std-cell-win { background: color-mix(in srgb, var(--win) 18%, transparent); color: var(--win); }
-.std-cell-loss { background: color-mix(in srgb, var(--lose) 18%, transparent); color: var(--lose); }
-.std-cell-draw { background: var(--surface); color: var(--text-muted); }
-.std-cell-bye { background: var(--surface-subtle); color: var(--text-subtle); }
+.std-cell-win { background: color-mix(in srgb, var(--win) 20%, var(--std-base)); color: var(--win); }
+.std-cell-loss { background: color-mix(in srgb, var(--lose) 20%, var(--std-base)); color: var(--lose); }
+.std-cell-draw { background: var(--std-raised); color: var(--text-muted); }
+.std-cell-bye { color: var(--text-subtle); }
 
 .std-cell-btn {
     background: none;
@@ -5626,19 +6046,63 @@ input.browser-search-input {
 }
 .std-cell-clickable:hover { filter: brightness(1.2); }
 
+/* Total pinned opposite the names */
 .std-th-total,
 .std-cell-total {
+    position: sticky;
+    right: 0;
+    z-index: 1;
     width: 3rem;
     font-weight: 700;
     color: var(--text-primary);
-    background: var(--surface);
+    background: var(--std-raised);
+    box-shadow: -1px 0 0 var(--border-color);
 }
+.std-th-total { z-index: 4; }
 
 .standings-empty {
     color: var(--text-subtle);
     font-style: italic;
     padding: 2rem;
     text-align: center;
+}
+
+/* Mobile: while standings are open they replace the game list, but the
+   search/toolbar row stays — it holds the (active) standings toggle,
+   which is the only way back to the list. */
+@media (max-width: 999px) {
+    .modal-content-viewer.browser-only:has(.viewer-standings:not(.hidden)) .browser-chips,
+    .modal-content-viewer.browser-only:has(.viewer-standings:not(.hidden)) .browser-filters,
+    .modal-content-viewer.browser-only:has(.viewer-standings:not(.hidden)) .browser-games-wrap {
+        display: none;
+    }
+    .modal-content-viewer.browser-only:has(.viewer-standings:not(.hidden)) .viewer-browser-panel,
+    .modal-content-viewer.browser-only:has(.viewer-standings:not(.hidden)) .browser-content {
+        flex: 0 0 auto;
+        min-height: 0;
+    }
+}
+
+/* Narrow phones: the identity columns + total would leave only slivers
+   for the actual round results. Drop the rating column (one tap away on
+   the profile) and tighten names so rounds get real estate. */
+@media (max-width: 480px) {
+    .std-th-rating,
+    .std-cell-rating {
+        display: none;
+    }
+    .std-cell-name {
+        max-width: 7.5rem;
+    }
+}
+
+/* Desktop: a 7-round table needs ~640px. Lift the modal's 1000px cap
+   while standings are open so every round fits without shrinking the
+   games list. */
+@media (min-width: 1000px) and (max-width: 1599px) {
+    .modal-content-viewer.has-browser:has(.viewer-standings:not(.hidden)) {
+        max-width: min(1200px, 96vw);
+    }
 }
 
 .browser-standings-btn.active {

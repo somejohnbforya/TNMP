@@ -502,6 +502,8 @@ export function initStyle(mount) {
         const dark = e.target.checked;
         localStorage.setItem('darkMode', dark ? '1' : '0');
         document.documentElement.classList.toggle('dark-mode', dark);
+        // The home answer re-renders its letters (tinted meme vs white)
+        window.dispatchEvent(new Event('tnmp-theme-change'));
     });
 
     // Apply stored preferences on load
