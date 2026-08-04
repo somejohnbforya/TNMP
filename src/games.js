@@ -823,7 +823,11 @@ function groupGames(games) {
     }
 
     if (ds?.playerName) {
-        const maxDate = (g) => g.games.reduce((max, x) => (x.date > max ? x.date : max), '');
+        // Sort key only — records keep their source date format. Legacy rows
+        // may carry PGN dot-dates (2026.05.19), which would otherwise
+        // lex-sort above ISO datetimes ('.' > '-' in ASCII).
+        const sortDate = (x) => (x.date || '').replace(/\./g, '-');
+        const maxDate = (g) => g.games.reduce((max, x) => (sortDate(x) > max ? sortDate(x) : max), '');
         groups.sort((a, b) => maxDate(b).localeCompare(maxDate(a)));
         for (const g of groups) g.games.sort((a, b) => (b.round || 0) - (a.round || 0));
     }
