@@ -2490,11 +2490,12 @@ button.viewer-close {
 }
 
 .viewer-player-score {
-    /* Instrument Serif at weight 400 — the scoresheet accent from the
-       design; serif renders small so it sizes up vs the old bold sans. */
-    font-family: var(--font-serif);
-    font-size: 1.55rem;
-    font-weight: 400;
+    /* Results are chess data — mono like every other number in the app.
+       (A serif accent was trialed here 2026-08-05 and read as a one-off.) */
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
     line-height: 1;
     flex-shrink: 0;
     color: var(--text-primary);
