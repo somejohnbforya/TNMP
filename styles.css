@@ -1741,6 +1741,13 @@ input.tm-search:focus { box-shadow: var(--shadow-xs), 0 0 0 1px var(--accent); }
     transform: translateY(-2px);
 }
 
+.modal-btn:disabled {
+    opacity: 0.45;
+    cursor: default;
+    transform: none;
+    box-shadow: none;
+}
+
 /* Primary = the home CTA pill: maximum-contrast fill, not accent green.
    light-dark inverts it for light-scheme modals (white-on-white fails). */
 .modal-btn-primary {
@@ -2684,8 +2691,11 @@ button.viewer-close {
     align-items: center;
     gap: 0.35rem;
     color: var(--text-muted);
+    font-family: var(--font-mono);
     font-weight: 600;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     white-space: nowrap;
 }
 .engine-icon {
@@ -2694,7 +2704,8 @@ button.viewer-close {
     opacity: 0.7;
 }
 .engine-variant-badge {
-    font-size: 0.65rem;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
     font-weight: 500;
     padding: 0.05rem 0.35rem;
     border-radius: 3px;
@@ -2708,7 +2719,9 @@ button.viewer-close {
     align-items: center;
     gap: 0.6rem;
     color: var(--text-faint, rgba(255, 255, 255, 0.5));
-    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
 }
 .engine-depth {
     font-variant-numeric: tabular-nums;
@@ -2725,7 +2738,8 @@ button.viewer-close {
     border: 1px solid var(--border-color);
     border-radius: 3px;
     color: var(--text-muted);
-    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
     padding: 0.1rem 0.2rem;
     cursor: pointer;
 }
