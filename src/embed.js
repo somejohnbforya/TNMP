@@ -31,8 +31,8 @@ const FEAT = {
 };
 
 // Viewer + data layer (same modules as the main app)
-import { trapFocus } from './modal.js';
-import { openStyle, initStyle } from './style.js';
+import { openModal, trapFocus } from './modal.js';
+import { initStyle, syncStylePane } from './style.js';
 import { showToast } from './toast.js';
 import { formatName, getHeader, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
@@ -93,7 +93,12 @@ function downloadPgn(pgnText, filename) {
 // --- Action dispatch (same as app.js, minus main-page actions) ---
 
 const ACTIONS = {
-    'open-style': openStyle,
+    // The embed has no settings panel — it wraps the shared style
+    // controls in its own standalone modal (built in init below).
+    'open-style': () => {
+        syncStylePane();
+        openModal('style-modal');
+    },
     'open-games': () => openGamePanel(),
     'open-profile': (e) => {
         const btn = e.target.closest('[data-action="open-profile"]');
@@ -409,6 +414,15 @@ function init() {
     const styleMount = document.createElement('div');
     styleMount.id = 'style-mount';
     styleMount.className = 'tnmp';
+    styleMount.innerHTML = `
+        <div id="style-modal" class="modal hidden" role="dialog" aria-labelledby="style-modal-title" aria-modal="true">
+            <div class="modal-backdrop"></div>
+            <div class="modal-content settings-modal-content">
+                <button data-close-modal class="style-close-btn" aria-label="Close">&times;</button>
+                <h2 id="style-modal-title">Style</h2>
+                <div id="embed-style-pane"></div>
+            </div>
+        </div>`;
     document.body.appendChild(styleMount);
 
     const profileMount = document.createElement('div');
@@ -433,7 +447,7 @@ function init() {
         if (_theme.boardLight) localStorage.setItem('boardLight', _theme.boardLight);
         if (_theme.boardDark) localStorage.setItem('boardDark', _theme.boardDark);
     }
-    initStyle(styleMount);
+    initStyle(document.getElementById('embed-style-pane'));
 
     // Inject inline piece images (chessground CSS fallback)
     injectPieces();
