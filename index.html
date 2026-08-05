@@ -47,6 +47,12 @@
     </script>
 </head>
 <body class="tnmp">
+    <!-- App shell: on mobile a fixed full-bleed sheet (content scrolls in
+         .app-screen, navbar anchors the sheet's bottom edge — same anatomy
+         as the viewer modal, which settles into notched corners correctly).
+         On desktop both wrappers are display:contents and vanish. -->
+    <div id="app-shell" class="app-shell tnmp">
+    <div class="app-screen">
     <div class="container">
         <div class="home-topbar">
             <h1 class="home-prompt">Are the pairings up?</h1>
@@ -105,6 +111,7 @@
             <button type="button" class="footer-link" data-action="open-privacy" aria-label="Privacy policy">Privacy</button>
         </div>
     </div>
+    </div><!-- /app-screen -->
 
     <!-- Mobile app navbar (hidden ≥1000px) — the shell's navigation; the
          footer above is the desktop counterpart. -->
@@ -126,6 +133,7 @@
             <span>Settings</span>
         </button>
     </nav>
+    </div><!-- /app-shell -->
 
     <div id="settings-mount" class="tnmp"></div>
 

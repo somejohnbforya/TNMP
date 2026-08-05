@@ -399,6 +399,9 @@ const ACTIONS = {
             if (m.id === 'viewer-modal') closeGamePanel();
             else closeModal(m.id);
         }
+        // On mobile the shell's inner screen is the scroller; on desktop
+        // the document is. Scrolling both is harmlessly idempotent.
+        document.querySelector('.app-screen')?.scrollTo({ top: 0, behavior: 'smooth' });
         window.scrollTo({ top: 0, behavior: 'smooth' });
     },
     'open-profile': (e) => {
