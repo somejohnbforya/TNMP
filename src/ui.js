@@ -352,12 +352,14 @@ const RESULT_VERB = {
 
 const BYE_LABEL = { full: 'Full-point bye', half: 'Half-point bye', zero: 'Zero-point bye' };
 
-/** Score summary across played rounds: W/B=1, D/H=½, L/U=0. */
-export function playerScore(rounds) {
+/** Score summary through the current round: W/B=1, D/H=½, L/U=0.
+ *  Byes committed for FUTURE rounds don't count until their round
+ *  arrives — 2½/5 this week becomes 3/6 next week, not 3½/7 today. */
+export function playerScore(rounds, currentRound = Infinity) {
     let score = 0;
     let played = 0;
-    for (const r of Object.values(rounds || {})) {
-        if (!r?.result) continue;
+    for (const [n, r] of Object.entries(rounds || {})) {
+        if (Number(n) > currentRound || !r?.result) continue;
         played++;
         if (r.result === 'W' || r.result === 'B') score += 1;
         else if (r.result === 'D' || r.result === 'H') score += 0.5;
@@ -546,7 +548,7 @@ export function renderRoundTracker(rounds, totalRounds, currentRound, currentSta
         playerEl.title = 'View your profile';
     }
     if (scoreEl) {
-        const { score, played } = playerScore(rounds);
+        const { score, played } = playerScore(rounds, currentRound);
         scoreEl.innerHTML = played ? `<b>${fmtScore(score)}</b> / ${played}` : '';
     }
 

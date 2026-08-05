@@ -36,6 +36,19 @@ describe('playerScore', () => {
         expect(playerScore(ROUNDS)).toEqual({ score: 2, played: 4 });
     });
 
+    it('excludes byes committed for future rounds until their round arrives', () => {
+        const withFutureByes = {
+            ...ROUNDS,
+            5: { isBye: true, byeType: 'half', result: 'H' },
+            6: { isBye: true, byeType: 'half', result: 'H' },
+            7: { isBye: true, byeType: 'half', result: 'H' },
+        };
+        // Through round 5: W + L + D + H + H = 2½/5, not 3½/7
+        expect(playerScore(withFutureByes, 5)).toEqual({ score: 2.5, played: 5 });
+        expect(playerScore(withFutureByes, 6)).toEqual({ score: 3, played: 6 });
+        expect(playerScore(withFutureByes, 7)).toEqual({ score: 3.5, played: 7 });
+    });
+
     it('handles empty rounds', () => {
         expect(playerScore({})).toEqual({ score: 0, played: 0 });
     });
