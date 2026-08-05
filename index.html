@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <!-- No apple-mobile-web-app-status-bar-style: black-translucent is
+         broken for installed web apps on current iOS — the web view gets
+         sized screen-minus-status-bar but painted top-anchored, letterboxing
+         the bottom by the status-bar height (verified in-simulator 2026-08-05,
+         including with manifest display:fullscreen). Default style = app
+         starts below the clock and the navbar reaches the physical bottom. -->
     <meta name="mobile-web-app-capable" content="yes">
     <title>Are the Pairings Up?</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
