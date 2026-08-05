@@ -6,7 +6,6 @@
  * Board colors are applied by regenerating an inline SVG checkerboard.
  */
 
-import { openModal } from './modal.js';
 import { setBoardCoordinates as setCoordinates } from './game-panel.js';
 
 // --- Piece themes ---
@@ -398,14 +397,10 @@ function updateSchemeTrigger(schemeId) {
 
 // --- Init & open ---
 
+/** Renders the style controls into a container (the settings panel's
+ *  Style tab) — no modal of its own since the 2026-08-05 settings merge. */
 export function initStyle(mount) {
     mount.innerHTML = `
-        <div id="style-modal" class="modal hidden" role="dialog" aria-labelledby="style-modal-title" aria-modal="true">
-            <div class="modal-backdrop"></div>
-            <div class="modal-content style-modal-content">
-                <button data-close-modal class="style-close-btn" aria-label="Close">&times;</button>
-                <h2 id="style-modal-title">Style</h2>
-
                 <div id="style-preview-board" class="style-preview-board"></div>
 
                 <div class="style-controls">
@@ -447,10 +442,7 @@ export function initStyle(mount) {
                             <span class="style-toggle-label">Dark Mode</span>
                         </label>
                     </div>
-                </div>
-
-            </div>
-        </div>`;
+                </div>`;
 
     // Close dropdowns on outside click
     document.addEventListener('click', closeAllDropdowns);
@@ -533,7 +525,9 @@ function refreshPreview() {
     }
 }
 
-export function openStyle() {
+/** Sync the Style tab's controls to stored state — called by the
+ *  settings panel each time the tab is shown. */
+export function syncStylePane() {
     const stored = getStored();
 
     // Populate dropdown menus
@@ -559,6 +553,4 @@ export function openStyle() {
 
     // Render preview
     refreshPreview();
-
-    openModal('style-modal');
 }

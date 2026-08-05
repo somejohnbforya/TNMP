@@ -110,14 +110,6 @@ if (typeof document !== 'undefined') {
             openModal(openBtn.dataset.openModal);
             return;
         }
-
-        const switchBtn = e.target.closest('[data-switch-modal]');
-        if (switchBtn) {
-            e.preventDefault();
-            const current = switchBtn.closest('.modal');
-            if (current) closeModal(current.id);
-            setTimeout(() => openModal(switchBtn.dataset.switchModal), 300);
-        }
     });
 
     document.addEventListener('keydown', (e) => {

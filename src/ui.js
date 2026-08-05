@@ -250,8 +250,10 @@ function updateTopbar(state) {
     const ctxEl = document.getElementById('home-context');
     const liveEl = document.getElementById('home-live');
     if (ctxEl) {
-        const name = getTournamentMeta().name || 'Tuesday Night Marathon';
+        const meta = getTournamentMeta();
+        const name = meta.name || 'Tuesday Night Marathon';
         ctxEl.textContent = name.replace(/Tuesday Night Marathon/i, 'TNM');
+        if (meta.url) ctxEl.href = meta.url;
     }
     if (liveEl) liveEl.classList.toggle('hidden', state !== STATE.YES && state !== STATE.IN_PROGRESS);
 }

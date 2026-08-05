@@ -498,6 +498,101 @@ html.dark-mode.results, html.dark-mode.off-season {
 #home-context {
     overflow: hidden;
     text-overflow: ellipsis;
+    color: inherit;
+    text-decoration: none;
+}
+
+#home-context::after {
+    content: ' ↗';
+    opacity: 0.5;
+}
+
+#home-context:hover {
+    color: var(--text-primary);
+}
+
+/* ── Mobile app navbar (the shell's navigation, <1000px only) ────── */
+
+.app-navbar {
+    display: none;
+}
+
+@media (max-width: 999px) {
+    .app-navbar {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1500;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        padding: 0.3rem 0.5rem calc(0.55rem + env(safe-area-inset-bottom));
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-top: 1px solid rgb(from var(--text-primary) r g b / 0.12);
+    }
+
+    /* The navbar subsumes the footer on mobile — no plaintext links. */
+    .footer {
+        display: none;
+    }
+
+    /* Top-aligned flow on mobile: vertically centering a taller-than-
+       viewport flex child clips its edges out of scroll reach, and the
+       centering slack read as dead space above the header row. */
+    body.tnmp {
+        align-items: flex-start;
+    }
+
+    .container {
+        padding-top: 1.25rem;
+        padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+    }
+
+    /* The navbar owns wayfinding on mobile — in-content buttons remain
+       only where the state's verb is an ACTION (Check Again + countdown).
+       View Games duplicates the Games tab; the external-link states
+       (yes/results/off-season) are covered by Games and the topbar link. */
+    #games-btn {
+        display: none;
+    }
+
+    html.yes .button-row,
+    html.results .button-row,
+    html.off-season .button-row {
+        display: none;
+    }
+}
+
+.nav-item {
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 0.5rem 0.25rem 0.25rem;
+    color: rgb(from var(--text-primary) r g b / 0.55);
+    transition: color var(--transition-fast);
+}
+
+.nav-item svg {
+    width: 20px;
+    height: 20px;
+}
+
+.nav-item span {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.nav-item.nav-active,
+.nav-item:hover {
+    color: var(--text-primary);
 }
 
 .home-live {
@@ -5606,7 +5701,12 @@ input.browser-search-input {
    ========================================================================== */
 @media (max-width: 600px) {
     /* Layout */
-    .container { padding: 1rem; }
+    /* Sides only — top/bottom (incl. navbar clearance) come from the
+       <1000px app-shell block and must not be stomped. */
+    .container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
 
     /* Off-season countdown */
     .off-season-countdown { padding: 1.5rem 1.5rem; }
@@ -5643,13 +5743,80 @@ input.browser-search-input {
 }
 
 /* Style modal */
-.style-modal-content {
+/* ── Settings panel (tabbed: You · Style · About) ────────────────── */
+
+.settings-modal-content {
     max-width: 560px;
     width: 95%;
     max-height: 90vh;
-    overflow: visible;
     position: relative;
+    display: flex;
+    flex-direction: column;
 }
+
+.settings-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 3px;
+    margin: 0 0 1.1rem;
+    background: rgb(from var(--shadow) r g b / 0.35);
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 rgb(from var(--foreground) r g b / 0.04), inset 0 0 0 1px rgb(from var(--foreground) r g b / 0.05);
+    flex-shrink: 0;
+}
+
+.settings-tab {
+    padding: 0.5rem 0;
+    background: transparent;
+    color: var(--text-subtle);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.settings-tab-active {
+    background: rgb(from var(--foreground) r g b / 0.1);
+    color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: inset 0 1px 0 rgb(from var(--foreground) r g b / 0.1), inset 0 0 0 1px rgb(from var(--foreground) r g b / 0.06);
+}
+
+.settings-pane {
+    overflow-y: auto;
+    min-height: 0;
+}
+
+.settings-pane.hidden {
+    display: none;
+}
+
+/* Privacy policy drills in from the About tab */
+.privacy-details summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 0.6rem 0;
+    border-top: 1px solid var(--border-color);
+    margin-top: 0.75rem;
+}
+
+.privacy-details summary:hover {
+    color: var(--text-primary);
+}
+
+.privacy-details[open] summary {
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 0.75rem;
+}
+
+.settings-about-cta {
+    margin-top: 1rem;
+}
+
 .style-close-btn {
     position: absolute;
     top: 0.4rem;

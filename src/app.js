@@ -1,12 +1,4 @@
-import {
-    WORKER_URL,
-    CONFIG,
-    STATE,
-    getAppState,
-    getTournamentMeta,
-    setTournamentMeta,
-    updateAppState,
-} from './config.js';
+import { WORKER_URL, CONFIG, STATE, getTournamentMeta, setTournamentMeta, updateAppState } from './config.js';
 import {
     showLoading,
     showState,
@@ -19,8 +11,8 @@ import {
     startCountdown,
 } from './ui.js';
 import { openSettings, saveSettings, initSettings } from './settings.js';
-import { openStyle, initStyle } from './style.js';
-import { openModal, closeModal, onModalClose, trapFocus } from './modal.js';
+import { initStyle } from './style.js';
+import { closeModal, trapFocus } from './modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './push.js';
 import {
     closeGamePanel,
@@ -79,7 +71,7 @@ import {
 } from './games.js';
 import { openCollectionBrowser } from './collection-browser.js';
 import { queryGames, prefetchGames } from './tnm.js';
-import { formatName, getHeader, resultDisplay, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
+import { formatName, getHeader, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 import { openGifMaker } from './gif-maker.js'; // also registers #gif hash trigger + window.openGifMaker
 
@@ -374,15 +366,32 @@ document.addEventListener('keydown', (e) => {
 
 // --- Action dispatch table ---
 const ACTIONS = {
-    'open-settings': openSettings,
-    'open-style': openStyle,
-    'share-status': shareStatus,
+    'open-settings': () => openSettings(),
+    'open-style': () => openSettings('style'),
+    'open-about': () => openSettings('about'),
+    'open-privacy': () => openSettings('about', { privacy: true }),
+    // Navbar Profile: your own stats and games one tap away. Without a
+    // name set, the settings You tab (name search focused) is the answer.
+    'nav-profile': () => {
+        if (CONFIG.playerName) openPlayerProfile(CONFIG.playerName);
+        else openSettings();
+    },
     'save-settings': () => saveSettings(wrappedCheckPairings),
     'enable-push': enablePush,
     'disable-push': disablePush,
     'open-games': () => {
         const key = getLastTournamentKey();
         if (key) openExplorerInTab(key);
+    },
+    // Navbar Home: return to the scoreboard — close whatever's on top.
+    // The viewer gets its own close path (pauses the engine); a raw
+    // closeModal would leave Stockfish analyzing a closed panel.
+    'nav-home': () => {
+        for (const m of document.querySelectorAll('.modal:not(.hidden)')) {
+            if (m.id === 'viewer-modal') closeGamePanel();
+            else closeModal(m.id);
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     },
     'open-profile': (e) => {
         const btn = e.target.closest('[data-action="open-profile"]');
@@ -630,80 +639,6 @@ document.addEventListener('click', (e) => {
     document.addEventListener('pointercancel', stop);
 }
 
-// ─── Share status (main page) ──────────────────────────────────────
-
-function getShareText() {
-    const { state, pairing, roundInfo } = getAppState();
-
-    let text;
-    let pairingText = '';
-
-    if (pairing && (state === STATE.YES || state === STATE.IN_PROGRESS || state === STATE.RESULTS)) {
-        if (pairing.isBye) {
-            pairingText =
-                pairing.byeType === 'full'
-                    ? ' I have a full-point bye this round.'
-                    : ' I have a half-point bye this round.';
-        } else if (state === STATE.RESULTS && pairing.playerResult) {
-            const result = resultDisplay(pairing.playerResult);
-            const ratingText = pairing.opponentRating ? ` (${pairing.opponentRating})` : '';
-            const outcomeText = result.outcome === 'win' ? 'Won' : result.outcome === 'loss' ? 'Lost' : 'Drew';
-            pairingText = ` ${outcomeText} with ${pairing.color} vs ${pairing.opponent}${ratingText} on Board ${pairing.board}.`;
-        } else {
-            const ratingText = pairing.opponentRating ? ` (${pairing.opponentRating})` : '';
-            pairingText = ` Playing ${pairing.color} vs ${pairing.opponent}${ratingText} on Board ${pairing.board}.`;
-        }
-    }
-
-    switch (state) {
-        case STATE.YES:
-            text = `The pairings are UP! ${roundInfo}${pairingText}`;
-            break;
-        case STATE.NO:
-            text = `Still waiting for pairings... ${roundInfo}`;
-            break;
-        case STATE.TOO_EARLY:
-            text = `Chill! ${roundInfo}`;
-            break;
-        case STATE.IN_PROGRESS:
-            text = `Chess in progress! ${roundInfo}${pairingText}`;
-            break;
-        case STATE.RESULTS:
-            text = `Results are in! ${roundInfo}`;
-            break;
-        case STATE.OFF_SEASON:
-            text = roundInfo || 'Check back for the next TNM schedule.';
-            break;
-        default:
-            text = 'Checking if the pairings are up...';
-    }
-    return text;
-}
-
-async function shareStatus() {
-    const text = getShareText();
-    const url = window.location.href.split('?')[0];
-
-    const shareData = { title: 'Are the Pairings Up?', text, url };
-
-    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-        try {
-            await navigator.share(shareData);
-        } catch (err) {
-            if (err.name !== 'AbortError') console.error('Share failed:', err);
-        }
-    } else {
-        const shareText = `${text}\n${url}`;
-        try {
-            await navigator.clipboard.writeText(shareText);
-            showToast('Copied to clipboard!', 'success');
-        } catch (err) {
-            console.error('Copy failed:', err);
-            showToast('Could not copy to clipboard', 'error');
-        }
-    }
-}
-
 async function handleShareAction(action) {
     closeMenu(getActiveTabEl()?.querySelector('.share-popover'));
     closeMenu(getActiveTabEl()?.querySelector('.overflow-menu'));
@@ -796,8 +731,9 @@ if ('serviceWorker' in navigator) {
 // --- Init on page load ---
 document.addEventListener('DOMContentLoaded', () => {
     initSettings(document.getElementById('settings-mount'));
+    // Style renders into the settings panel's Style tab — must follow initSettings.
     initGamePanel(document.getElementById('game-panel-mount'));
-    initStyle(document.getElementById('style-mount'));
+    initStyle(document.getElementById('settings-style-pane'));
 
     // Hide "Share..." on platforms without native share
     if (!navigator.share) {
@@ -806,14 +742,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     initPlayerProfile(document.getElementById('profile-mount'));
 
-    // First-visit onboarding
+    // First-visit onboarding: the settings panel opens on About, whose
+    // "Set up your name →" button leads into the You tab.
     if (!localStorage.getItem('hasVisited')) {
         localStorage.setItem('hasVisited', 'true');
-        onModalClose('about-modal', () => {
-            onModalClose('about-modal', null);
-            if (!CONFIG.playerName) setTimeout(() => openSettings(), 300);
-        });
-        setTimeout(() => openModal('about-modal'), 500);
+        setTimeout(() => openSettings('about'), 500);
     }
 
     // Dev-only palette editor (Cmd+Shift+P to toggle) — disabled

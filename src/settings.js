@@ -3,65 +3,113 @@ import { showToast } from './toast.js';
 import { openModal, closeModal } from './modal.js';
 import { checkPushStatus, syncPushSubscription, updatePushPrefs } from './push.js';
 import { searchPlayers } from './games.js';
+import { syncStylePane } from './style.js';
+
+const TABS = ['you', 'style', 'about'];
 
 export function initSettings(mount) {
     mount.innerHTML = `
         <div id="settings-modal" class="modal hidden" role="dialog" aria-labelledby="settings-modal-title" aria-modal="true">
             <div class="modal-backdrop"></div>
-            <div class="modal-content">
-                <h2 id="settings-modal-title">Settings</h2>
-                <div class="setting-group">
-                    <label for="player-name-input">Your Name</label>
-                    <div class="setting-name-wrap">
-                        <input type="text" id="player-name-input" placeholder="Search for your name..." autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="settings-autocomplete">
-                        <div id="settings-autocomplete" class="browser-autocomplete hidden" role="listbox"></div>
-                    </div>
-                    <p class="setting-hint">Start typing to find your name, or enter it manually.</p>
+            <div class="modal-content settings-modal-content">
+                <button data-close-modal class="style-close-btn" aria-label="Close">&times;</button>
+                <h2 id="settings-modal-title" class="visually-hidden">Settings</h2>
+                <div class="settings-tabs" role="tablist" aria-label="Settings sections">
+                    <button type="button" class="settings-tab" data-settings-tab="you" role="tab">You</button>
+                    <button type="button" class="settings-tab" data-settings-tab="style" role="tab">Style</button>
+                    <button type="button" class="settings-tab" data-settings-tab="about" role="tab">About</button>
                 </div>
-                <div id="push-section" class="setting-group" data-push="unknown">
-                    <label>Notifications</label>
-                    <p class="push-when-unsupported setting-hint">Push notifications are not supported in this browser.</p>
-                    <button class="push-when-unsubscribed modal-btn modal-btn-primary" data-action="enable-push">Enable Push Notifications</button>
-                    <p class="push-when-unsubscribed setting-hint">Get browser notifications when pairings or results are posted.</p>
-                    <div class="push-when-subscribed notification-status-row">
-                        <span class="notification-status-badge">Push Active</span>
-                        <button data-action="disable-push" class="modal-btn modal-btn-secondary modal-btn-small">Disable</button>
+                <div class="settings-pane" data-pane="you" role="tabpanel">
+                    <div class="setting-group">
+                        <label for="player-name-input">Your Name</label>
+                        <div class="setting-name-wrap">
+                            <input type="text" id="player-name-input" placeholder="Search for your name..." autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="settings-autocomplete">
+                            <div id="settings-autocomplete" class="browser-autocomplete hidden" role="listbox"></div>
+                        </div>
+                        <p class="setting-hint">Start typing to find your name, or enter it manually.</p>
                     </div>
-                    <div class="push-when-subscribed notify-prefs">
-                        <label class="notify-pref-label">
-                            <input type="checkbox" id="push-pref-pairings" checked>
-                            Pairings posted
-                        </label>
-                        <label class="notify-pref-label">
-                            <input type="checkbox" id="push-pref-results" checked>
-                            Results posted
-                        </label>
+                    <div id="push-section" class="setting-group" data-push="unknown">
+                        <label>Notifications</label>
+                        <p class="push-when-unsupported setting-hint">Push notifications are not supported in this browser.</p>
+                        <button class="push-when-unsubscribed modal-btn modal-btn-primary" data-action="enable-push">Enable Push Notifications</button>
+                        <p class="push-when-unsubscribed setting-hint">Get browser notifications when pairings or results are posted.</p>
+                        <div class="push-when-subscribed notification-status-row">
+                            <span class="notification-status-badge">Push Active</span>
+                            <button data-action="disable-push" class="modal-btn modal-btn-secondary modal-btn-small">Disable</button>
+                        </div>
+                        <div class="push-when-subscribed notify-prefs">
+                            <label class="notify-pref-label">
+                                <input type="checkbox" id="push-pref-pairings" checked>
+                                Pairings posted
+                            </label>
+                            <label class="notify-pref-label">
+                                <input type="checkbox" id="push-pref-results" checked>
+                                Results posted
+                            </label>
+                        </div>
+                        <p id="push-status" class="notification-status hidden" role="alert" aria-live="assertive"></p>
                     </div>
-                    <p id="push-status" class="notification-status hidden" role="alert" aria-live="assertive"></p>
+                    <p class="setting-hint setting-feedback">Suggestions, bugs, or feedback? Email <a href="mailto:info@tnmpairings.com">info@tnmpairings.com</a></p>
+                    <div class="modal-buttons">
+                        <button data-close-modal class="modal-btn modal-btn-secondary">Cancel</button>
+                        <button data-action="save-settings" class="modal-btn modal-btn-primary">Save</button>
+                    </div>
                 </div>
-                <p class="setting-hint setting-feedback">Suggestions, bugs, or feedback? Email <a href="mailto:info@tnmpairings.com">info@tnmpairings.com</a></p>
-                <div class="modal-buttons">
-                    <button data-close-modal class="modal-btn modal-btn-secondary">Cancel</button>
-                    <button data-action="save-settings" class="modal-btn modal-btn-primary">Save</button>
-                </div>
+                <div class="settings-pane hidden" data-pane="style" id="settings-style-pane" role="tabpanel"></div>
+                <div class="settings-pane hidden" data-pane="about" role="tabpanel"></div>
             </div>
         </div>`;
     document.getElementById('push-pref-pairings').addEventListener('change', updatePushPrefs);
     document.getElementById('push-pref-results').addEventListener('change', updatePushPrefs);
+
+    // About pane content lives in index.html as a template — adopt it.
+    const aboutTpl = document.getElementById('settings-about-template');
+    const aboutPane = mount.querySelector('[data-pane="about"]');
+    if (aboutTpl) aboutPane.append(aboutTpl.content);
+
+    // Tab switching (also handles the About pane's "Set up your name →")
+    mount.querySelector('#settings-modal').addEventListener('click', (e) => {
+        const tabBtn = e.target.closest('[data-settings-tab]');
+        if (tabBtn) switchTab(tabBtn.dataset.settingsTab);
+    });
 }
 
 // --- Settings modal ---
 
 let _autocompleteReady = false;
 
-export function openSettings() {
-    const input = document.getElementById('player-name-input');
-    input.value = CONFIG.playerName;
+function switchTab(tab) {
+    if (!TABS.includes(tab)) tab = 'you';
+    const modal = document.getElementById('settings-modal');
+    for (const btn of modal.querySelectorAll('.settings-tab')) {
+        const on = btn.dataset.settingsTab === tab;
+        btn.classList.toggle('settings-tab-active', on);
+        btn.setAttribute('aria-selected', on);
+    }
+    for (const pane of modal.querySelectorAll('.settings-pane')) {
+        pane.classList.toggle('hidden', pane.dataset.pane !== tab);
+    }
+    if (tab === 'style') syncStylePane();
+    if (tab === 'you') {
+        const input = document.getElementById('player-name-input');
+        input.value = CONFIG.playerName;
+        checkPushStatus();
+    }
+}
+
+/**
+ * Open the settings panel on a tab: 'you' (default), 'style', or 'about'.
+ * opts.privacy expands the privacy policy within the About tab.
+ */
+export function openSettings(tab = 'you', { privacy = false } = {}) {
+    switchTab(tab);
+    const details = document.getElementById('privacy-details');
+    if (details) details.open = privacy;
+    const focusTarget = tab === 'you' ? document.getElementById('player-name-input') : undefined;
+    openModal('settings-modal', focusTarget);
     document.getElementById('settings-autocomplete').classList.add('hidden');
-    openModal('settings-modal', input);
-    checkPushStatus();
     if (!_autocompleteReady) {
-        initNameAutocomplete(input);
+        initNameAutocomplete(document.getElementById('player-name-input'));
         _autocompleteReady = true;
     }
 }

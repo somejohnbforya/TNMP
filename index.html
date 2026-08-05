@@ -28,7 +28,7 @@
         <div class="home-topbar">
             <h1 class="home-prompt">Are the pairings up?</h1>
             <span class="home-topbar-right">
-                <span id="home-context"></span>
+                <a id="home-context" target="_blank" rel="noopener" href="https://www.milibrary.org/chess/tournaments/"></a>
                 <span id="home-live" class="home-live hidden"><span class="live-dot" aria-hidden="true"></span>LIVE</span>
             </span>
         </div>
@@ -71,48 +71,53 @@
                 View Tournament Page
             </a>
             <span class="footer-divider" aria-hidden="true">•</span>
-            <button type="button" class="footer-link" data-action="share-status" aria-label="Share current status">Share</button>
-            <span class="footer-divider" aria-hidden="true">•</span>
             <button type="button" class="footer-link" data-action="open-settings" aria-label="Open settings">Settings</button>
             <span class="footer-divider" aria-hidden="true">•</span>
             <button type="button" class="footer-link" data-action="open-style" aria-label="Open style settings">Style</button>
             <span class="footer-divider" aria-hidden="true">•</span>
             <a href="#gif" class="footer-link" aria-label="Share a game as video">Video</a>
             <span class="footer-divider" aria-hidden="true">•</span>
-            <button type="button" class="footer-link" data-open-modal="about-modal" aria-label="About this app">About</button>
+            <button type="button" class="footer-link" data-action="open-about" aria-label="About this app">About</button>
             <span class="footer-divider" aria-hidden="true">•</span>
-            <button type="button" class="footer-link" data-open-modal="privacy-modal" aria-label="Privacy policy">Privacy</button>
+            <button type="button" class="footer-link" data-action="open-privacy" aria-label="Privacy policy">Privacy</button>
         </div>
     </div>
 
-    <div id="settings-mount" class="tnmp"></div>
-    <div id="style-mount" class="tnmp"></div>
+    <!-- Mobile app navbar (hidden ≥1000px) — the shell's navigation; the
+         footer above is the desktop counterpart. -->
+    <nav id="app-navbar" class="app-navbar tnmp" aria-label="App navigation">
+        <button type="button" class="nav-item nav-active" data-action="nav-home">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-4.5-9.5-9C1 8.5 3 5 6.5 5 8.5 5 10 6 12 8c2-2 3.5-3 5.5-3C21 5 23 8.5 21.5 12c-2.5 4.5-9.5 9-9.5 9z"/></svg>
+            <span>Pairings</span>
+        </button>
+        <button type="button" class="nav-item" data-action="open-games">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+            <span>Games</span>
+        </button>
+        <button type="button" class="nav-item" data-action="nav-profile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
+            <span>Profile</span>
+        </button>
+        <button type="button" class="nav-item" data-action="open-settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            <span>Settings</span>
+        </button>
+    </nav>
 
-    <!-- About Modal -->
-    <div id="about-modal" class="modal hidden" role="dialog" aria-labelledby="about-modal-title" aria-modal="true">
-        <div class="modal-backdrop"></div>
-        <div class="modal-content modal-content-wide">
-            <h2 id="about-modal-title">About</h2>
+    <div id="settings-mount" class="tnmp"></div>
+
+    <!-- About tab content — adopted into the settings panel by settings.js -->
+    <template id="settings-about-template">
             <div class="about-body">
                 <p><strong>Are the Pairings Up?</strong> is a companion app for the
                 <a href="https://www.milibrary.org/chess/tournaments/" target="_blank" rel="noopener">Tuesday Night Marathon</a>
                 at the Mechanics' Institute in San Francisco.</p>
                 <p>Get instant answers on pairings and results, with optional push notifications. Browse and replay games with a built-in PGN viewer, explore opening trends across the tournament, and view player profiles with stats and game history.</p>
                 <p class="about-disclaimer">This is an independent project and is <strong>not affiliated with or endorsed by</strong> the Mechanics' Institute.</p>
-                <p class="about-privacy">Your privacy matters. No cookies, no analytics, no tracking. <a href="#" data-switch-modal="privacy-modal">Full privacy policy</a>.</p>
                 <p class="about-credit">Built with Cloudflare Workers, Pages &amp; D1. <a href="/architecture" target="_blank" rel="noopener">See how</a>.</p>
             </div>
-            <div class="modal-buttons">
-                <button data-close-modal class="modal-btn modal-btn-primary">Got it</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Privacy Modal -->
-    <div id="privacy-modal" class="modal hidden" role="dialog" aria-labelledby="privacy-modal-title" aria-modal="true">
-        <div class="modal-backdrop"></div>
-        <div class="modal-content modal-content-wide modal-content-scrollable">
-            <h2 id="privacy-modal-title">Privacy Policy</h2>
+            <details class="privacy-details" id="privacy-details">
+                <summary>Privacy — no cookies, no analytics, no tracking. Full policy</summary>
             <div class="privacy-body">
                 <p class="privacy-updated">Last updated: March 21, 2026</p>
 
@@ -160,11 +165,11 @@
                 <h3>Contact</h3>
                 <p>Questions about this policy? Email <a href="mailto:info@tnmpairings.com">info@tnmpairings.com</a>.</p>
             </div>
-            <div class="modal-buttons">
-                <button data-close-modal class="modal-btn modal-btn-primary">Close</button>
+            </details>
+            <div class="modal-buttons settings-about-cta">
+                <button type="button" class="modal-btn modal-btn-primary" data-settings-tab="you">Set up your name →</button>
             </div>
-        </div>
-    </div>
+    </template>
 
     <div id="game-panel-mount" class="tnmp"></div>
 
