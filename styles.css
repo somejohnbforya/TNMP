@@ -542,6 +542,13 @@ html.dark-mode.results, html.dark-mode.off-season {
         left: 0;
         right: 0;
         bottom: 0;
+        /* Navbar geometry, shared between the bar and the scroller's
+           clearance. The item row rides 12px into the home-indicator
+           inset — the viewer toolbar's proven stance (iOS only claims
+           edge swipes; taps in the inset land fine). The max() keeps a
+           small pad on non-notched devices where env() is 0. */
+        --navbar-pad-bottom: max(calc(env(safe-area-inset-bottom) - 12px), 0.2rem);
+        --navbar-clearance: calc(53px + var(--navbar-pad-bottom));
     }
 
     .app-screen {
@@ -551,15 +558,22 @@ html.dark-mode.results, html.dark-mode.off-season {
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         overscroll-behavior: contain;
-        padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+            var(--navbar-clearance) env(safe-area-inset-left);
     }
 
+    /* The navbar overlays the scroller (native tab-bar anatomy):
+       content slides behind the glass and shows through the blur
+       instead of stopping dead at an opaque chin. */
     .app-navbar {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        flex-shrink: 0;
-        padding: 0.3rem 0.5rem calc(0.2rem + env(safe-area-inset-bottom));
-        background: rgba(28, 28, 33, 0.92);
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 0.3rem 0.5rem var(--navbar-pad-bottom);
+        background: rgba(28, 28, 33, 0.85);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
         border-top: 1px solid rgb(from var(--text-primary) r g b / 0.12);
