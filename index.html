@@ -23,11 +23,16 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="./styles.css">
     <script>
-        // Boot watchdog: if the app bundle hasn't executed within 8s,
-        // assume a wedged cache/service worker (seen on iOS PWAs after
-        // rapid deploys) — unregister the SW, clear caches, reload once.
+        // Boot watchdog: if the app bundle hasn't executed OR the
+        // stylesheet failed to load within 8s, assume a wedged cache/
+        // service worker (seen on iOS PWAs after rapid deploys) —
+        // unregister the SW, clear caches, reload once.
         setTimeout(function () {
-            if (window.__tnmpBooted) return;
+            var cssAlive = false;
+            try {
+                cssAlive = getComputedStyle(document.documentElement).getPropertyValue('--radius-card').trim() !== '';
+            } catch (e) { /* treat as dead */ }
+            if (window.__tnmpBooted && cssAlive) return;
             try {
                 if (sessionStorage.getItem('tnmp-boot-retry')) return; // one retry only
                 sessionStorage.setItem('tnmp-boot-retry', '1');

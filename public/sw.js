@@ -53,17 +53,22 @@ self.addEventListener('fetch', (event) => {
             }).catch(() => caches.match(event.request))
         );
     } else if (isAsset) {
-        // Cache-first for hashed assets, memes, and pieces
+        // Cache-first for hashed assets, memes, and pieces. The network
+        // fall-through retries once before giving up — a single transient
+        // failure on a render-critical asset (the stylesheet) otherwise
+        // ships an unstyled app for the whole page load.
         event.respondWith(
             caches.match(event.request).then((cached) => {
                 if (cached) return cached;
-                return fetch(event.request).then((response) => {
-                    if (response.ok) {
-                        const clone = response.clone();
-                        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-                    }
-                    return response;
-                });
+                const fetchAndCache = () =>
+                    fetch(event.request).then((response) => {
+                        if (response.ok) {
+                            const clone = response.clone();
+                            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+                        }
+                        return response;
+                    });
+                return fetchAndCache().catch(() => fetchAndCache());
             })
         );
     }
