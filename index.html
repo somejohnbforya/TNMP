@@ -22,6 +22,29 @@
     <meta name="twitter:card" content="summary_large_image">
     <link rel="manifest" href="/manifest.json">
     <link rel="stylesheet" href="./styles.css">
+    <script>
+        // Boot watchdog: if the app bundle hasn't executed within 8s,
+        // assume a wedged cache/service worker (seen on iOS PWAs after
+        // rapid deploys) — unregister the SW, clear caches, reload once.
+        setTimeout(function () {
+            if (window.__tnmpBooted) return;
+            try {
+                if (sessionStorage.getItem('tnmp-boot-retry')) return; // one retry only
+                sessionStorage.setItem('tnmp-boot-retry', '1');
+            } catch (e) { /* storage unavailable — just reload */ }
+            var done = function () { location.reload(); };
+            var tasks = [];
+            if ('serviceWorker' in navigator) {
+                tasks.push(navigator.serviceWorker.getRegistrations()
+                    .then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+            }
+            if (window.caches && caches.keys) {
+                tasks.push(caches.keys()
+                    .then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+            }
+            Promise.all(tasks).then(done, done);
+        }, 8000);
+    </script>
 </head>
 <body class="tnmp">
     <div class="container">

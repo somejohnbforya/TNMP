@@ -75,6 +75,14 @@ import { formatName, getHeader, closeMenu, toggleMenu, closeAllMenus } from './u
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 import { openGifMaker } from './gif-maker.js'; // also registers #gif hash trigger + window.openGifMaker
 
+// Signal the index.html boot watchdog: the bundle loaded and evaluated.
+window.__tnmpBooted = true;
+try {
+    sessionStorage.removeItem('tnmp-boot-retry');
+} catch {
+    /* storage unavailable */
+}
+
 function downloadPgn(pgnText, filename) {
     const blob = new Blob([pgnText], { type: 'application/x-chess-pgn' });
     const url = URL.createObjectURL(blob);
