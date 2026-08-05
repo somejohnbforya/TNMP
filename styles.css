@@ -325,6 +325,17 @@ html.tnmp {
     letter-spacing: 0.08em;
 }
 
+/* Meta-label convention (set by the home tracker/pairing labels):
+   letterspaced uppercase mono for section and context labels — labels
+   only, never player names. */
+.viewer-round-label,
+.browser-section-header,
+.profile-section-title,
+.explorer-table-header,
+.nag-section-title {
+    font-family: var(--font-mono);
+}
+
 html.tnmp {
     min-height: 100%;
     transition: background var(--transition-slow);
@@ -1717,10 +1728,11 @@ input.tm-search:focus { box-shadow: var(--shadow-xs), 0 0 0 1px var(--accent); }
 
 .modal-btn {
     padding: 0.75rem 1.5rem;
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 600;
+    letter-spacing: -0.01em;
     border: none;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-pill);
     cursor: pointer;
     transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
@@ -1729,19 +1741,23 @@ input.tm-search:focus { box-shadow: var(--shadow-xs), 0 0 0 1px var(--accent); }
     transform: translateY(-2px);
 }
 
+/* Primary = the home CTA pill: maximum-contrast fill, not accent green.
+   light-dark inverts it for light-scheme modals (white-on-white fails). */
 .modal-btn-primary {
-    background: var(--accent);
-    color: var(--text-primary);
+    background: light-dark(#1a1a1a, #fff);
+    color: light-dark(#fff, #1a1a1a);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18), inset 0 1px 0 light-dark(rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.8));
 }
 
 .modal-btn-primary:hover {
-    box-shadow: 0 4px 15px rgb(from var(--accent) r g b /0.4);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28), inset 0 1px 0 light-dark(rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.8));
 }
 
 .modal-btn-secondary {
-    background: var(--overlay-light);
+    background: rgb(from var(--text-primary) r g b / 0.08);
     color: var(--text-primary);
-    border: var(--border-subtle);
+    border: 1.5px solid rgb(from var(--text-primary) r g b / 0.28);
+    box-shadow: var(--shadow-xs);
 }
 
 .modal-btn-secondary:hover {
@@ -2319,7 +2335,7 @@ button.viewer-close {
     font-weight: 600;
     color: var(--text-subtle);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
 }
 
 .viewer-browse-arrow {
@@ -2474,8 +2490,12 @@ button.viewer-close {
 }
 
 .viewer-player-score {
-    font-size: 1.3rem;
-    font-weight: 700;
+    /* Instrument Serif at weight 400 — the scoresheet accent from the
+       design; serif renders small so it sizes up vs the old bold sans. */
+    font-family: var(--font-serif);
+    font-size: 1.55rem;
+    font-weight: 400;
+    line-height: 1;
     flex-shrink: 0;
     color: var(--text-primary);
 }
@@ -2525,10 +2545,17 @@ button.viewer-close {
     flex-shrink: 0;
 }
 
+.viewer-player-rating {
+    font-family: var(--font-mono);
+    font-size: 0.82em;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--text-subtle);
+    font-variant-numeric: tabular-nums;
+}
+
 .viewer-unrated {
-    font-weight: 400;
-    font-style: italic;
-    opacity: 0.5;
+    opacity: 0.6;
 }
 .viewer-player-name {
     font-size: 0.85rem;
@@ -4959,7 +4986,6 @@ input.browser-search-input {
 /* Unrated elo */
 .browser-elo:empty::before {
     content: 'unr.';
-    font-style: italic;
     opacity: 0.6;
 }
 
@@ -4978,8 +5004,11 @@ input.browser-search-input {
 }
 
 .browser-elo {
+    font-family: var(--font-mono);
     font-size: 0.65rem;
+    letter-spacing: 0.02em;
     color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
     flex-shrink: 0;
 }
 

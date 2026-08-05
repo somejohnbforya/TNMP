@@ -2402,13 +2402,19 @@ function updateGameHeader(meta) {
     _activeTab.browsePrev.classList.toggle('hidden', !meta.onPrev);
     _activeTab.browseNext.classList.toggle('hidden', !meta.onNext);
 
-    // Players
-    const whiteNameEl = _activeTab.whiteName;
-    const blackNameEl = _activeTab.blackName;
-    whiteNameEl.innerHTML = white + (whiteElo ? ` (${whiteElo})` : ' <span class="viewer-unrated">(unr.)</span>');
-    whiteNameEl.dataset.player = white;
-    blackNameEl.innerHTML = black + (blackElo ? ` (${blackElo})` : ' <span class="viewer-unrated">(unr.)</span>');
-    blackNameEl.dataset.player = black;
+    // Players — name as text (names are data, never markup), rating in
+    // its own mono span per the app-wide numeric convention.
+    for (const [el, name, elo] of [
+        [_activeTab.whiteName, white, whiteElo],
+        [_activeTab.blackName, black, blackElo],
+    ]) {
+        el.textContent = name;
+        const rating = document.createElement('span');
+        rating.className = elo ? 'viewer-player-rating' : 'viewer-player-rating viewer-unrated';
+        rating.textContent = elo ? `· ${elo}` : '· unr.';
+        el.append(' ', rating);
+        el.dataset.player = name;
+    }
     _activeTab.whiteScore.textContent = resultSymbol(result, 'white');
     _activeTab.blackScore.textContent = resultSymbol(result, 'black');
     _activeTab.playerWhite.className = `viewer-player ${resultClass(result, 'white')}`;
