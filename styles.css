@@ -1111,6 +1111,7 @@ html:not(.dark-mode) .answer-svg {
 /* Toast notifications */
 .toast {
     position: fixed;
+    font-family: var(--font-sans);
     top: 2rem;
     left: 50%;
     transform: translateX(-50%) translateY(-0.5rem);
@@ -1168,6 +1169,7 @@ html:not(.dark-mode) .answer-svg {
 
 #offline-banner {
     position: fixed;
+    font-family: var(--font-sans);
     top: 0;
     left: 0;
     right: 0;
@@ -1303,6 +1305,8 @@ html:not(.dark-mode) .answer-svg {
 
 .modal-content {
     position: relative;
+    /* Design unification: all modals share the home screen's type stack. */
+    font-family: var(--font-sans);
     background: linear-gradient(135deg,
         var(--modal-bg),
         color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
@@ -2224,6 +2228,9 @@ input.tm-search:focus { box-shadow: var(--shadow-xs), 0 0 0 1px var(--accent); }
 /* Game Viewer Modal */
 .modal-content-viewer {
     position: relative;
+    /* Design-unification trial: the viewer adopts the home screen's
+       type stack (2026-08-05, step 1 of the language merge). */
+    font-family: var(--font-sans);
     background: linear-gradient(135deg,
         var(--modal-bg),
         color-mix(in srgb, var(--modal-bg), light-dark(white, black) 42%));
@@ -2395,7 +2402,8 @@ button.viewer-close {
 
 .viewer-opening {
     text-align: center;
-    font-size: 0.78rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
     color: var(--text-muted);
     margin-top: 0.75rem;
     padding: 0.25rem 0.5rem;
@@ -2484,7 +2492,8 @@ button.viewer-close {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
@@ -2620,7 +2629,8 @@ button.viewer-close {
     padding: 0.5rem 0.75rem;
     background: var(--raised-panel-bg);
     border-radius: var(--radius-sm);
-    font-size: 0.85rem;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
     color: var(--text-muted);
     line-height: 1.8;
     box-shadow: var(--shadow-sm);
@@ -2701,6 +2711,7 @@ button.viewer-close {
     gap: 0.5rem;
     padding: 0.3rem 0.6rem;
     min-height: 1.6em;
+    font-family: var(--font-mono);
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
 }
 .engine-pv-row:last-child { border-bottom: none; }
