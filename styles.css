@@ -532,16 +532,16 @@ html.dark-mode.results, html.dark-mode.off-season {
         display: flex;
         flex-direction: column;
         position: fixed;
-        /* Longhand offsets + explicit dimensions — the exact recipe the
-           viewer modal uses, proven on notched iPhones. iOS left the
-           inset-shorthand version content-sized, floating the navbar
-           mid-screen under short content. */
+        /* Offsets ONLY, no width/height — the viewer modal's exact
+           recipe, proven to reach the physical bottom on notched
+           iPhones. Adding height:100% over-constrains the box: CSS
+           drops `bottom` and sizes to the layout viewport, which on
+           iOS ends ABOVE the home-indicator zone — that was the
+           floating navbar with ~50px of letterbox below it. */
         top: 0;
         left: 0;
         right: 0;
         bottom: 0;
-        width: 100%;
-        height: 100%;
     }
 
     .app-screen {
