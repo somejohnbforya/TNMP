@@ -90,6 +90,12 @@
     --result-draw-border: rgb(from var(--foreground) r g b / 0.5);
     --result-draw-bg: rgb(from var(--foreground) r g b / 0.15);
 
+    /* ── Explorer piece-color bar (pure accents; bodies blend
+       with --modal-bg at point of use, like the eval bar) ─── */
+    --bar-white: #e8e8e8;
+    --bar-draw: #808080;
+    --bar-black: #1a1a1a;
+
     /* ── Derived: viewer chrome ───────────────────────────── */
     --toolbar-icon: rgb(from var(--foreground) r g b / 0.85);
 
@@ -5049,6 +5055,7 @@ input.browser-search-input {
 }
 
 .browser-board {
+    font-family: var(--font-mono);
     font-size: 0.75rem;
     font-weight: 700;
     color: var(--text-faint);
@@ -5621,9 +5628,27 @@ input.browser-search-input {
     opacity: 1;
 }
 
-.explorer-tip-w { color: var(--nag-good); }
-.explorer-tip-d { color: var(--text-faint); }
-.explorer-tip-b { color: var(--nag-blunder); }
+.explorer-tip-w,
+.explorer-tip-d,
+.explorer-tip-b {
+    color: var(--text-muted);
+}
+
+.explorer-tip-w::before,
+.explorer-tip-d::before,
+.explorer-tip-b::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 4px;
+    border-radius: 2px;
+    border: 1px solid var(--border-color);
+}
+
+.explorer-tip-w::before { background: var(--bar-white); }
+.explorer-tip-d::before { background: var(--bar-draw); }
+.explorer-tip-b::before { background: var(--bar-black); }
 
 .explorer-col-move {
     min-width: 3rem;
@@ -5655,21 +5680,22 @@ input.browser-search-input {
     height: 1rem;
     border-radius: var(--radius-xs);
     overflow: hidden;
+    border: 1px solid rgb(from var(--border-color) r g b / calc(alpha / 2));
 }
 
 .explorer-bar-w {
-    background: var(--result-win-bg);
-    border-bottom: 2px solid var(--win);
+    background: color-mix(in srgb, var(--modal-bg) 55%, var(--bar-white));
+    border-bottom: 2px solid var(--bar-white);
 }
 
 .explorer-bar-d {
-    background: var(--result-draw-bg);
-    border-bottom: 2px solid var(--result-draw-border);
+    background: color-mix(in srgb, var(--modal-bg) 55%, var(--bar-draw));
+    border-bottom: 2px solid var(--bar-draw);
 }
 
 .explorer-bar-b {
-    background: var(--result-lose-bg);
-    border-bottom: 2px solid var(--lose);
+    background: color-mix(in srgb, var(--modal-bg) 55%, var(--bar-black));
+    border-bottom: 2px solid var(--bar-black);
 }
 
 .explorer-col-score {
