@@ -18,7 +18,7 @@ Every Monday evening, players in one of the longest-running chess tournaments in
 
 ## The Archive
 
-The D1 database contains **23,000+ games with full notation** spanning 90 tournaments from 2008 to the present. Every game is matched to its official US Chess tournament record, with verified player identities, corrected dates, ECO classification, and canonical names.
+The D1 database contains **24,000+ games with full notation** spanning 90 tournaments from 2008 to the present. Every game is matched to its official US Chess tournament record, with verified player identities, corrected dates, ECO classification, and canonical names.
 
 The archive is freely queryable through the public API (see below).
 
@@ -42,7 +42,7 @@ A Pages Function at the edge intercepts crawler requests to inject dynamic Open 
 - **Server-side state computation** — the worker pre-computes tournament state on a cron schedule. The frontend is a thin rendering layer.
 - **Web Push from scratch** — VAPID JWT generation and RFC 8291 payload encryption implemented directly, no push service SDK.
 - **Position-based ECO classification** — 3,641 EPD positions from lichess chess-openings, matched by board state rather than move sequence.
-- **Public composable game API** — `GET /query` supports filtering by player, opponent, color, ECO, rating range, result, round, and date across 23,000+ games from 18 years of TNM history. No auth required.
+- **Public composable game API** — `GET /query` supports filtering by player, opponent, color, ECO, rating range, result, round, and date across 24,000+ games from 18 years of TNM history. No auth required.
 
 ## Stack
 
