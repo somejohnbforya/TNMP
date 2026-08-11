@@ -578,6 +578,9 @@ html.dark-mode.results, html.dark-mode.off-season {
         left: 0;
         right: 0;
         bottom: 0;
+        /* Above the scroller's stacking contexts (.container is z-index:1) —
+           content must slide UNDER the glass, never over it. */
+        z-index: 10;
         padding: 0.3rem 0.5rem var(--navbar-pad-bottom);
         background: rgba(28, 28, 33, 0.85);
         backdrop-filter: blur(20px);
