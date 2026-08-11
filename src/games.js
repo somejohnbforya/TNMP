@@ -783,6 +783,7 @@ export function getVisibleGames() {
             const sa = sectionOrder.get(a.section) ?? 999;
             const sb = sectionOrder.get(b.section) ?? 999;
             if (sa !== sb) return sa - sb;
+            if ((a.round || 0) !== (b.round || 0)) return (a.round || 0) - (b.round || 0);
             return (a.board || 999) - (b.board || 999);
         });
     }

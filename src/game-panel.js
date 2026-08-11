@@ -3148,12 +3148,13 @@ function renderBrowserFilters(panelEl, state) {
 
     let html = '';
     if (showRounds) {
+        const wide = window.innerWidth > 600;
         html += '<select class="browser-round-select">';
         for (const r of roundNumbers) {
             const selected = r === state.round ? ' selected' : '';
-            const label = window.innerWidth > 600 ? `Round ${r}` : `R${r}`;
-            html += `<option value="${r}"${selected}>${label}</option>`;
+            html += `<option value="${r}"${selected}>${wide ? `Round ${r}` : `R${r}`}</option>`;
         }
+        html += `<option value=""${state.round == null ? ' selected' : ''}>${wide ? 'All rounds' : 'All'}</option>`;
         html += '</select>';
     }
     if (showSections) {
@@ -3322,7 +3323,8 @@ function renderBrowserGameList(panelEl, state) {
     for (const { header, games: groupItems } of state.groupedGames) {
         if (header) items.push({ type: 'header', data: header });
         for (const game of groupItems) {
-            items.push({ type: 'game', data: game, label: playerMode ? `${game.round}.${game.board || '?'}` : null });
+            const labelRound = playerMode || state.round == null;
+            items.push({ type: 'game', data: game, label: labelRound ? `${game.round}.${game.board || '?'}` : null });
         }
     }
     vl.items = items;
@@ -3698,7 +3700,7 @@ function wireBrowserListeners(panelEl) {
         'change',
         (e) => {
             if (e.target.classList.contains('browser-round-select')) {
-                games.setFilter('round', parseInt(e.target.value, 10));
+                games.setFilter('round', e.target.value ? parseInt(e.target.value, 10) : null);
             }
             if (e.target.dataset?.chip === 'tournament-select') {
                 loadExplorer();
