@@ -1069,16 +1069,22 @@ html:not(.dark-mode) .answer-svg {
     gap: 8px;
 }
 
-.pp-you {
+.pp-left {
     padding: 0 8px 0 16px;
 }
 
-.pp-opp {
+.pp-right {
     padding: 0 16px 0 8px;
 }
 
-.pp-you .pp-info {
+.pp-left .pp-info {
     text-align: right;
+}
+
+/* The name-link button shrink-wraps as a block box, so the parent's
+   text-align can't place it — push it to the seam side with margin. */
+.pp-left .pp-name-link {
+    margin-left: auto;
 }
 
 .pp-info {
@@ -1107,7 +1113,7 @@ html:not(.dark-mode) .answer-svg {
     text-decoration: underline;
     text-decoration-color: rgba(255, 255, 255, 0.35);
     text-underline-offset: 3px;
-    text-align: left;
+    text-align: inherit;
 }
 
 .pp-rating {

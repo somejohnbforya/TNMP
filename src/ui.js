@@ -479,23 +479,29 @@ export function buildPairingPillHtml(pairing, playerName, playerRating, roundNum
 
     const youColor = pairing.color;
     const oppColor = youColor === 'White' ? 'Black' : 'White';
+    const you = {
+        color: youColor,
+        title: playerName,
+        infoHtml: `<div class="pp-name">${esc(surname(playerName))}</div>${playerRating ? `<div class="pp-rating">${esc(playerRating)}</div>` : ''}`,
+    };
+    const opp = {
+        color: oppColor,
+        title: pairing.opponent,
+        infoHtml: `<button type="button" class="pp-name pp-name-link" data-action="open-profile" data-name="${esc(pairing.opponent || '')}">${esc(surname(pairing.opponent))}</button>${pairing.opponentRating ? `<div class="pp-rating">${esc(pairing.opponentRating)}</div>` : ''}`,
+    };
+    // Board order, not tracked-player order: white always left of the seam.
+    const [left, right] = youColor === 'White' ? [you, opp] : [opp, you];
     return `
         ${metaRow}
         <div class="pairing-pill">
-            <div class="pp-side pp-you" title="${esc(playerName)}">
-                <div class="pp-info">
-                    <div class="pp-name">${esc(surname(playerName))}</div>
-                    ${playerRating ? `<div class="pp-rating">${esc(playerRating)}</div>` : ''}
-                </div>
-                ${pieceImg(youColor, 26, 'pp-piece')}
+            <div class="pp-side pp-left" title="${esc(left.title)}">
+                <div class="pp-info">${left.infoHtml}</div>
+                ${pieceImg(left.color, 26, 'pp-piece')}
             </div>
             <div class="pp-seam" aria-hidden="true">VS</div>
-            <div class="pp-side pp-opp" title="${esc(pairing.opponent)}">
-                ${pieceImg(oppColor, 26, 'pp-piece')}
-                <div class="pp-info">
-                    <button type="button" class="pp-name pp-name-link" data-action="open-profile" data-name="${esc(pairing.opponent || '')}">${esc(surname(pairing.opponent))}</button>
-                    ${pairing.opponentRating ? `<div class="pp-rating">${esc(pairing.opponentRating)}</div>` : ''}
-                </div>
+            <div class="pp-side pp-right" title="${esc(right.title)}">
+                ${pieceImg(right.color, 26, 'pp-piece')}
+                <div class="pp-info">${right.infoHtml}</div>
             </div>
         </div>
     `;

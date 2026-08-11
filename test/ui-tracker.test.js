@@ -113,18 +113,28 @@ describe('buildTrackerDetailHtml', () => {
 describe('buildPairingPillHtml', () => {
     const pairing = { board: 18, color: 'Black', opponent: 'Carl Anthony Pickering', opponentRating: 1758 };
 
-    it('shows both surnames with the correct piece per side', () => {
+    it('orders sides white | black regardless of tracked color', () => {
         const html = buildPairingPillHtml(pairing, 'John Boyer', 1743, 5, ROUND_DATES);
-        // You play Black → your side gets bK, opponent side gets wK
-        const you = html.slice(html.indexOf('pp-you'), html.indexOf('pp-seam'));
-        const opp = html.slice(html.indexOf('pp-opp'));
-        expect(you).toContain('bK.svg');
-        expect(you).toContain('Boyer');
-        expect(you).toContain('1743');
-        expect(opp).toContain('wK.svg');
-        expect(opp).toContain('Pickering');
-        expect(opp).toContain('1758');
+        // You play Black → you render on the RIGHT; opponent (White) on the left
+        const left = html.slice(html.indexOf('pp-left'), html.indexOf('pp-seam'));
+        const right = html.slice(html.indexOf('pp-right'));
+        expect(left).toContain('wK.svg');
+        expect(left).toContain('Pickering');
+        expect(left).toContain('1758');
+        expect(right).toContain('bK.svg');
+        expect(right).toContain('Boyer');
+        expect(right).toContain('1743');
         expect(html).toContain('Round 5 · Board 18');
+    });
+
+    it('keeps the tracked player left when they have white', () => {
+        const html = buildPairingPillHtml({ ...pairing, color: 'White' }, 'John Boyer', 1743, 5, ROUND_DATES);
+        const left = html.slice(html.indexOf('pp-left'), html.indexOf('pp-seam'));
+        const right = html.slice(html.indexOf('pp-right'));
+        expect(left).toContain('wK.svg');
+        expect(left).toContain('Boyer');
+        expect(right).toContain('bK.svg');
+        expect(right).toContain('Pickering');
     });
 
     it('links the opponent to their profile with the full name', () => {
