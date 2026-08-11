@@ -354,22 +354,8 @@ document.addEventListener('keydown', (e) => {
         } else if (e.key === 'Escape') {
             closeModal('settings-modal');
         }
-    } else {
-        // About and Privacy modals share the same keyboard behavior
-        for (const id of ['about-modal', 'privacy-modal']) {
-            const modal = document.getElementById(id);
-            if (!modal.classList.contains('hidden')) {
-                trapFocus(e, id);
-                if (
-                    e.key === 'Escape' ||
-                    (e.key === 'Enter' && !['A', 'BUTTON'].includes(document.activeElement.tagName))
-                ) {
-                    closeModal(id);
-                }
-                break;
-            }
-        }
     }
+    // About and Privacy live in the settings panel now — no standalone modals to trap.
 });
 
 // --- Action dispatch table ---
