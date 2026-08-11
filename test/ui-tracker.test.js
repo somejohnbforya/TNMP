@@ -137,10 +137,11 @@ describe('buildPairingPillHtml', () => {
         expect(right).toContain('Pickering');
     });
 
-    it('links the opponent to their profile with the full name', () => {
+    it('links both players to their profiles with full names', () => {
         const html = buildPairingPillHtml(pairing, 'John Boyer', 1743, 5, ROUND_DATES);
         expect(html).toContain('data-action="open-profile"');
         expect(html).toContain('data-name="Carl Anthony Pickering"');
+        expect(html).toContain('data-name="John Boyer"');
     });
 
     it('renders a bye pill with the duck', () => {
