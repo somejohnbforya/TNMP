@@ -69,6 +69,13 @@ export function initSettings(mount) {
 
     // Tab switching (also handles the About pane's "Set up your name →")
     mount.querySelector('#settings-modal').addEventListener('click', (e) => {
+        // Outside-click saves rather than discards — a typed name should
+        // survive a stray backdrop click. Cancel remains the discard path.
+        if (e.target.classList.contains('modal-backdrop')) {
+            e.stopPropagation();
+            mount.querySelector('[data-action="save-settings"]').click();
+            return;
+        }
         const tabBtn = e.target.closest('[data-settings-tab]');
         if (tabBtn) switchTab(tabBtn.dataset.settingsTab);
     });
