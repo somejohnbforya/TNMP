@@ -477,7 +477,7 @@ function switchTab(tab) {
 
     // Resume engine on arriving tab
     if (_activeTab.engineActive && !_activeTab.enginePaused) {
-        const fen = _activeTab.game?.getCurrentFen();
+        const fen = currentAnalysisFen();
         if (fen) analyzeCurrentPosition(fen);
     }
 
@@ -1164,10 +1164,14 @@ games.onChange(() => {
         setToolbarButtons();
         renderExplorerHeader(_activeTab.gamesState);
         renderExplorerMoveList();
+        const prevFen = _activeTab.currentFen;
         _activeTab.currentFen = games.getExplorerFen();
         _activeTab.board.setPosition(_activeTab.currentFen, true);
         _activeTab.board.highlightSquares(null, null);
         _activeTab.board.resize();
+        if (_activeTab.engineActive && _activeTab.currentFen && _activeTab.currentFen !== prevFen) {
+            analyzeCurrentPosition(_activeTab.currentFen);
+        }
     }
 });
 
@@ -1269,7 +1273,7 @@ export function toggleEngine() {
         engine.stopAnalysis();
         _activeTab.enginePanel?.classList.add('hidden');
         _activeTab.evalBar?.classList.add('hidden');
-        _activeTab.engineBtn?.classList.remove('active');
+        syncEngineButtons(false);
         positionEnginePanel();
         // Destroy engine if no other tab needs it
         if (!_tabs.some((t) => t.engineActive)) engine.destroyEngine();
@@ -1297,7 +1301,7 @@ export function confirmEngineChoice(variant) {
 }
 
 function startEngine(variant) {
-    _activeTab.engineBtn?.classList.add('active');
+    syncEngineButtons(true);
 
     // Show loading state immediately
     const panel = _activeTab.enginePanel;
@@ -1315,7 +1319,7 @@ function startEngine(variant) {
         })
         .catch((err) => {
             console.error('Engine failed to load:', err);
-            _activeTab.engineBtn?.classList.remove('active');
+            syncEngineButtons(false);
             if (panel) panel.classList.add('hidden');
             showToast('Engine failed to load', 'error');
         });
@@ -1344,7 +1348,7 @@ function activateEngine() {
     const panel = _activeTab.enginePanel;
     panel?.classList.remove('hidden');
     _activeTab.evalBar?.classList.remove('hidden');
-    _activeTab.engineBtn?.classList.add('active');
+    syncEngineButtons(true);
     positionEnginePanel();
 
     // Set variant badge
@@ -1361,7 +1365,7 @@ function activateEngine() {
         linesSelect.onchange = () => {
             _engineNumLines = parseInt(linesSelect.value);
             localStorage.setItem('engine-lines', _engineNumLines);
-            const fen = _activeTab.game.getCurrentFen();
+            const fen = currentAnalysisFen();
             if (fen) analyzeCurrentPosition(fen);
         };
     }
@@ -1370,7 +1374,7 @@ function activateEngine() {
     const pvContainer = _activeTab.enginePvLines;
     if (pvContainer) pvContainer.onclick = handlePvClick;
 
-    const fen = _activeTab.game.getCurrentFen();
+    const fen = currentAnalysisFen();
     if (fen) analyzeCurrentPosition(fen);
 }
 
@@ -1384,9 +1388,20 @@ export function toggleEnginePause() {
     if (_activeTab.enginePaused) {
         engine.stopAnalysis();
     } else {
-        const fen = _activeTab.game.getCurrentFen();
+        const fen = currentAnalysisFen();
         if (fen) analyzeCurrentPosition(fen);
     }
+}
+
+/** FEN under analysis: the game's position, or the explorer's when no game is loaded. */
+function currentAnalysisFen() {
+    return _activeTab.game ? _activeTab.game.getCurrentFen() : games.getExplorerFen();
+}
+
+/** Engine toggle state shows on the viewer toolbar and the explorer toolbar alike. */
+function syncEngineButtons(on) {
+    _activeTab.engineBtn?.classList.toggle('active', on);
+    _activeTab.el.querySelector('.explorer-toolbar [data-action="viewer-engine"]')?.classList.toggle('active', on);
 }
 
 function analyzeCurrentPosition(fen) {
@@ -1520,9 +1535,13 @@ function handlePvClick(e) {
     const moveIdx = parseInt(moveEl.dataset.pvIdx);
     const info = _activeTab.pvInfos[lineIdx];
     if (!info?.pv?.length) return;
-    const fen = _activeTab.game.getCurrentFen();
+    const fen = currentAnalysisFen();
     const sanMoves = engine.pvToSan(fen, info.pv.slice(0, moveIdx + 1));
-    for (const san of sanMoves) _activeTab.game.playMove(san);
+    if (_activeTab.game) {
+        for (const san of sanMoves) _activeTab.game.playMove(san);
+    } else {
+        games.setExplorerPosition([...games.getExplorerMoves(), ...sanMoves]);
+    }
 }
 
 // ─── Engine settings ─────────────────────────────────────────────
@@ -1612,7 +1631,7 @@ export function applyEngineSettings() {
     } else if (engine.isReady()) {
         // Safe mid-session option change: stop → bestmove → setoption → isready → readyok
         engine.setOptions({ hash: newHash, threads: newThreads }).then(() => {
-            const fen = _activeTab.game.getCurrentFen();
+            const fen = currentAnalysisFen();
             if (fen && _activeTab.engineActive) analyzeCurrentPosition(fen);
         });
     }
@@ -2267,6 +2286,8 @@ export function handlePanelKeydown(e) {
             e.preventDefault();
         } else if (e.key === 'f' || e.key === 'F') {
             _activeTab.board.flip();
+        } else if (e.key === 'a' || e.key === 'A') {
+            toggleEngine();
         } else if (e.key === 'Escape') {
             closeGamePanel();
         }
@@ -2672,6 +2693,7 @@ function renderExplorerMoveListHtml(stats, moveHistory) {
     html += `<button class="explorer-tb-btn" data-action="explorer-start" aria-label="Reset" data-tooltip="Reset"${dis}>${icon('start', 16)}</button>`;
     html += `<button class="explorer-tb-btn" data-action="explorer-prev" aria-label="Back" data-tooltip="Back"${dis}>${icon('prev', 16)}</button>`;
     html += `<button class="explorer-tb-btn" data-action="explorer-flip" aria-label="Flip board" data-tooltip="Flip board (F)">${icon('flip', 16)}</button>`;
+    html += `<button class="explorer-tb-btn${_activeTab.engineActive ? ' active' : ''}" data-action="viewer-engine" aria-label="Toggle engine analysis" data-tooltip="Engine analysis (A)">${icon('engine', 16)}</button>`;
     if (total > 0) {
         html += `<button class="explorer-tb-btn explorer-tb-games" data-action="explorer-view-games">${total} ${total === 1 ? 'game' : 'games'} \u203A</button>`;
     }

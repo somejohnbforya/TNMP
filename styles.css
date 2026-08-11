@@ -2818,6 +2818,10 @@ button.viewer-close {
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-sm);
     font-size: 0.8rem;
+    /* The panel mounts in four hosts of very different widths (side col,
+       browser column, mobile sheet, explorer) — it adapts to its own
+       measured width, not the viewport's. */
+    container-type: inline-size;
 }
 .engine-panel-header {
     display: flex;
@@ -2826,6 +2830,10 @@ button.viewer-close {
     padding: 0.35rem 0.6rem;
     border-bottom: 1px solid var(--border-color);
     gap: 0.5rem;
+    /* Squeezed past its floor, the header breaks into title/controls
+       rows instead of clipping — leaf items never split mid-content. */
+    flex-wrap: wrap;
+    row-gap: 0.15rem;
 }
 .engine-panel-title {
     display: flex;
@@ -2867,6 +2875,15 @@ button.viewer-close {
 .engine-depth {
     font-variant-numeric: tabular-nums;
     opacity: 0.6;
+    white-space: nowrap;
+}
+
+/* Narrow panel: shed diagnostics before anything interactive. */
+@container (max-width: 430px) {
+    .engine-nps { display: none; }
+}
+@container (max-width: 340px) {
+    .engine-variant-badge { display: none; }
 }
 .engine-lines-label {
     display: flex;
@@ -5746,6 +5763,7 @@ input.browser-search-input {
     box-shadow: var(--shadow-xs);
 }
 .explorer-tb-btn:hover:not(:disabled) { background: var(--surface-subtle); color: var(--accent); box-shadow: var(--shadow-sm); }
+.explorer-tb-btn.active { color: var(--accent); }
 .explorer-tb-btn:disabled { opacity: 0.3; cursor: default; }
 .explorer-tb-games {
     flex: 1;
