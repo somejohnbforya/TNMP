@@ -9,6 +9,7 @@
 import { CONFIG } from './config.js';
 import { openModal } from './modal.js';
 import { prefetchStandings, stripTitle, nameKey } from './standings.js';
+import { queryGames } from './tnm.js';
 import { estimateRating } from './rating-calc.js';
 
 // Blank "prior games" means an established player; 50 saturates the
@@ -18,6 +19,9 @@ const ESTABLISHED_N = 50;
 let _data = null; // /standings payload, or null when unavailable
 let _rows = []; // [{ round, opponent, oppRating, score }] score: 1|0.5|0|null
 let _skipped = 0; // byes/forfeits dropped during pre-load (not rated)
+let _floor = null; // selected player's US Chess rating floor, or null
+let _floorSeq = 0; // guards async floor fills against player switches
+const _floorCache = new Map(); // nameKey → Promise<floor|0>
 
 const esc = (s) =>
     String(s ?? '').replace(
@@ -55,21 +59,43 @@ function loadPlayer(si, pi) {
 
     document.getElementById('est-rating').value = p.rating ?? '';
     document.getElementById('est-prior').value = p.rating == null ? 0 : '';
-    document.getElementById('est-floor').value = '';
-    updateFloorHint(p);
+    loadFloor(stripTitle(p.name));
     render();
 }
 
-// US Chess publishes each member's floor (including money-prize and
-// Life Master floors we could never derive) on their MUIR player page,
-// so the hint links straight to the selected player's page.
-function updateFloorHint(p) {
-    const hint = document.getElementById('est-floor-hint');
-    const id = p?.id && /^\d+$/.test(p.id) ? p.id : null;
-    const lookup = id
-        ? `<a href="https://ratings.uschess.org/player/${id}" target="_blank" rel="noopener">${esc(stripTitle(p.name))}'s US Chess page</a>`
-        : 'the US Chess member page';
-    hint.innerHTML = `Floor: check ${lookup} — usually peak rating − 200; leave blank if none.`;
+// The floor is a property of the player's US Chess account, served by
+// the worker (which fetches and caches it from US Chess member data)
+// as playerFloor on any player-filtered /query.
+async function lookupFloor(name) {
+    const key = nameKey(name);
+    if (!_floorCache.has(key)) {
+        const promise = queryGames({ player: name, tournament: 'all', include: '', limit: 1 })
+            .then((data) => data.playerFloor || 0)
+            .catch(() => {
+                _floorCache.delete(key); // transient failure — retry next time
+                return 0;
+            });
+        _floorCache.set(key, promise);
+    }
+    return _floorCache.get(key);
+}
+
+function loadFloor(name) {
+    _floor = null;
+    updateFloorNote();
+    const seq = ++_floorSeq;
+    lookupFloor(name).then((floor) => {
+        if (seq !== _floorSeq) return; // a different player was selected meanwhile
+        _floor = floor || null;
+        updateFloorNote();
+        compute();
+    });
+}
+
+function updateFloorNote() {
+    const note = document.getElementById('est-floor-note');
+    note.classList.toggle('hidden', !_floor);
+    note.textContent = _floor ? `Rating floor ${_floor} — applied automatically (US Chess).` : '';
 }
 
 function findTracked() {
@@ -121,8 +147,7 @@ function compute() {
     const unrated = ratingRaw === '';
     const r0 = unrated ? 1300 : parseInt(ratingRaw, 10);
     const prior = unrated ? 0 : priorRaw === '' ? ESTABLISHED_N : Math.max(0, parseInt(priorRaw, 10) || 0);
-    const floorRaw = parseInt(document.getElementById('est-floor').value, 10);
-    const floor = Number.isFinite(floorRaw) ? floorRaw : 100;
+    const floor = _floor ?? 100;
 
     const res = Number.isFinite(r0) ? estimateRating(r0, prior, _rows, floor) : null;
     if (!res) {
@@ -197,10 +222,11 @@ export async function openEstimator() {
     } else {
         _rows = [];
         _skipped = 0;
+        _floor = null;
+        _floorSeq++;
         document.getElementById('est-rating').value = '';
         document.getElementById('est-prior').value = '';
-        document.getElementById('est-floor').value = '';
-        updateFloorHint(null);
+        updateFloorNote();
         render();
     }
     openModal('estimator-modal');
@@ -219,20 +245,16 @@ export function initEstimator(mount) {
                 </div>
                 <div class="est-inputs">
                     <div class="setting-group">
-                        <label for="est-rating">Rating</label>
+                        <label for="est-rating">Current rating</label>
                         <input type="number" id="est-rating" min="100" max="3000" placeholder="unrated">
                     </div>
                     <div class="setting-group">
-                        <label for="est-prior">Prior games</label>
+                        <label for="est-prior">Prior rated games</label>
                         <input type="number" id="est-prior" min="0" max="999" placeholder="25+">
-                    </div>
-                    <div class="setting-group">
-                        <label for="est-floor">Floor</label>
-                        <input type="number" id="est-floor" min="100" max="2200" placeholder="none">
                     </div>
                 </div>
                 <p class="setting-hint">Leave games blank if established. 8 or fewer uses the provisional formula, like the official estimator.</p>
-                <p id="est-floor-hint" class="setting-hint"></p>
+                <p id="est-floor-note" class="setting-hint hidden"></p>
                 <div id="est-rows" class="est-rows"></div>
                 <p id="est-skip-note" class="setting-hint hidden">Byes and forfeits aren't rated, so they were left out.</p>
                 <button type="button" id="est-add" class="modal-btn modal-btn-secondary modal-btn-small">+ Add a game</button>

@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection, pacificNow } from './helpers.js';
+import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection, pacificNow, extractRatingFloor, floorFromPeak } from './helpers.js';
 import { resolveTournament, computeAppState, discoverUpcomingTournaments } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications, retryPendingNotifications } from './push.js';
 import {
@@ -193,18 +193,22 @@ async function runCronLogic(env) {
                 const norm = normalizePlayerName(name);
                 const regular = data.ratings?.find(r => r.ratingSystem === 'R');
                 const rating = regular?.rating || null;
+                // Published floor if the payload carries one, else derived
+                // from the current rating (their peak so far as we know it).
+                const floor = extractRatingFloor(data) ?? floorFromPeak(rating) ?? 0;
 
                 uscfIdMap.set(uscfId, { name, norm, aliases: [norm] });
                 aliasMap.set(norm, { name, norm });
 
                 newPlayerStmts.push(
                     env.DB.prepare(
-                        `INSERT INTO players (name, name_norm, uscf_id, aliases, rating, rating_updated_at)
-                         VALUES (?, ?, ?, ?, ?, ?)
+                        `INSERT INTO players (name, name_norm, uscf_id, aliases, rating, rating_floor, rating_updated_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)
                          ON CONFLICT(name_norm) DO UPDATE SET
                          uscf_id = COALESCE(excluded.uscf_id, players.uscf_id),
-                         rating = excluded.rating, rating_updated_at = excluded.rating_updated_at`
-                    ).bind(name, norm, uscfId, JSON.stringify([norm]), rating, new Date().toISOString())
+                         rating = excluded.rating, rating_updated_at = excluded.rating_updated_at,
+                         rating_floor = COALESCE(NULLIF(excluded.rating_floor, 0), players.rating_floor, 0)`
+                    ).bind(name, norm, uscfId, JSON.stringify([norm]), rating, floor, new Date().toISOString())
                 );
             } catch (err) {
                 console.error(`Failed to fetch US Chess data for ${uscfId}:`, err.message);

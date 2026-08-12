@@ -6766,7 +6766,7 @@ video.gif-result-img { background: #000; }
 
 .est-inputs {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
 }
 

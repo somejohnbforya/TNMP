@@ -5,7 +5,7 @@
  *          /eco-classify, /submit-game
  */
 
-import { corsResponse, corsHeaders, normalizePlayerName, formatPlayerName, resolveCurrentSlug, validateGameId } from './helpers.js';
+import { corsResponse, corsHeaders, normalizePlayerName, formatPlayerName, resolveCurrentSlug, validateGameId, extractRatingFloor, floorFromPeak } from './helpers.js';
 import { classifyOpening, replayToFen, classifyFen } from './eco.js';
 import ecoEpd from './eco-epd.json';
 import { generateBoardSvg } from './og-board.js';
@@ -265,7 +265,7 @@ export async function handleQuery(request, env) {
     // Look up USCF ID when filtering by player
     if (norm) {
         queries.push(
-            env.DB.prepare('SELECT uscf_id, rating, rating_updated_at FROM players WHERE name_norm = ?').bind(norm).first()
+            env.DB.prepare('SELECT uscf_id, rating, rating_floor, rating_history, rating_updated_at FROM players WHERE name_norm = ?').bind(norm).first()
         );
     }
 
@@ -276,22 +276,36 @@ export async function handleQuery(request, env) {
     const byeResult = fetchByes ? results[idx++] : null;
     let playerRow = norm ? results[idx++] : null;
 
-    // Refresh rating if stale (older than 14 days) and player has a USCF ID
+    // Refresh rating if stale (older than 14 days) and player has a USCF ID.
+    // A NULL rating_floor means the floor was never determined (the column
+    // postdates most rows), so refresh eagerly in that case too.
     if (playerRow?.uscf_id) {
         const updatedAt = playerRow.rating_updated_at ? new Date(playerRow.rating_updated_at) : null;
         const stale = !updatedAt || (Date.now() - updatedAt.getTime() > 14 * 24 * 60 * 60 * 1000);
-        if (stale) {
+        if (stale || playerRow.rating_floor == null) {
             try {
                 const res = await fetch(`https://ratings-api.uschess.org/api/v1/members/${playerRow.uscf_id}/`);
                 if (res.ok) {
                     const data = await res.json();
                     const regular = data.ratings?.find(r => r.ratingSystem === 'R');
                     const rating = regular?.rating || null;
+                    // Floor: what US Chess publishes, else derived from the
+                    // player's peak (rating history + current). 0 = none.
+                    let floor = extractRatingFloor(data);
+                    if (floor == null) {
+                        let peak = rating || 0;
+                        try {
+                            for (const entry of JSON.parse(playerRow.rating_history || '[]')) {
+                                if (entry.rating > peak) peak = entry.rating;
+                            }
+                        } catch { /* malformed history */ }
+                        floor = floorFromPeak(peak);
+                    }
                     const now = new Date().toISOString();
                     await env.DB.prepare(
-                        `UPDATE players SET rating = ?, rating_updated_at = ? WHERE name_norm = ?`
-                    ).bind(rating, now, norm).run();
-                    playerRow = { ...playerRow, rating };
+                        `UPDATE players SET rating = ?, rating_floor = ?, rating_updated_at = ? WHERE name_norm = ?`
+                    ).bind(rating, floor ?? 0, now, norm).run();
+                    playerRow = { ...playerRow, rating, rating_floor: floor ?? 0 };
                 }
             } catch (err) {
                 console.error(`Failed to refresh rating for ${norm}:`, err.message);
@@ -350,6 +364,7 @@ export async function handleQuery(request, env) {
     if (norm) response.playerNorm = norm;
     if (playerRow?.uscf_id) response.uscfId = playerRow.uscf_id;
     if (playerRow?.rating) response.playerRating = playerRow.rating;
+    if (playerRow?.rating_floor) response.playerFloor = playerRow.rating_floor;
     return corsResponse(response, 200, env, request);
 }
 

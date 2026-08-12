@@ -48,6 +48,45 @@ export function formatPlayerName(name) {
     return name;
 }
 
+// --- Rating floor ---
+// US Chess publishes a member's rating floor with their account data.
+// The member payload isn't documented, so extraction scans for any
+// floor-named field, preferring one attached to the Regular rating.
+// Peak-based floors run 1200-2100; the Original Life Master floor is
+// 2200, so that's the ceiling for a credible value.
+
+function validFloor(value) {
+    const n = typeof value === 'string' ? parseInt(value, 10) : value;
+    return Number.isInteger(n) && n >= 1200 && n <= 2200 ? n : null;
+}
+
+function deepFindFloor(obj, depth = 0) {
+    if (!obj || typeof obj !== 'object' || depth > 3) return null;
+    for (const [key, value] of Object.entries(obj)) {
+        if (/floor/i.test(key)) {
+            const n = validFloor(value && typeof value === 'object' ? (value.rating ?? value.value) : value);
+            if (n != null) return n;
+        }
+    }
+    for (const value of Object.values(obj)) {
+        const n = deepFindFloor(value, depth + 1);
+        if (n != null) return n;
+    }
+    return null;
+}
+
+export function extractRatingFloor(memberData) {
+    const regular = memberData?.ratings?.find?.(r => r.ratingSystem === 'R');
+    return deepFindFloor(regular) ?? deepFindFloor(memberData);
+}
+
+// The peak-based rule: highest attained rating minus 200, at the
+// floor value just below. Peaks under 1400 produce no floor.
+export function floorFromPeak(peak) {
+    if (!Number.isFinite(peak) || peak < 1400) return null;
+    return Math.min(2100, Math.floor((peak - 200) / 100) * 100);
+}
+
 // Normalize section names to canonical forms:
 // - Fix truncated rating ranges ("1600-199" → "1600-1999")
 // - "u" → "U" prefix
