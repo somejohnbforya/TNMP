@@ -112,7 +112,8 @@ function findTracked() {
 
 function segBtn(row, idx, score, label) {
     const on = row.score === score;
-    return `<button type="button" class="est-seg-btn${on ? ' est-seg-on' : ''}" data-est-score="${score}" data-est-idx="${idx}" aria-pressed="${on}">${label}</button>`;
+    const kind = score === 1 ? 'win' : score === 0.5 ? 'draw' : 'loss';
+    return `<button type="button" class="est-seg-btn${on ? ` est-seg-on est-seg-${kind}` : ''}" data-est-score="${score}" data-est-idx="${idx}" aria-pressed="${on}">${label}</button>`;
 }
 
 function renderRows() {

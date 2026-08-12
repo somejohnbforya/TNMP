@@ -6844,9 +6844,21 @@ video.gif-result-img { background: #000; }
     border-left: 1px solid rgb(from var(--foreground) r g b / 0.15);
 }
 
-.est-seg-on {
-    background: color-mix(in srgb, var(--accent) 25%, transparent);
-    color: var(--text-primary);
+/* Selected result speaks the app's result colors, mirroring the
+   standings crosstable: win/lose tinted, draw neutral. */
+.est-seg-on.est-seg-win {
+    background: var(--result-win-bg);
+    color: var(--result-win-text);
+}
+
+.est-seg-on.est-seg-loss {
+    background: var(--result-lose-bg);
+    color: var(--result-lose-text);
+}
+
+.est-seg-on.est-seg-draw {
+    background: var(--result-draw-bg);
+    color: var(--text-muted);
 }
 
 .est-row-del {
