@@ -48,8 +48,8 @@ export function getStandings(slug) {
 // games table and server name-normalization don't recognize titles, so
 // strip the leading title before comparing or looking up.
 const TITLE_RE = /^(GM|IM|FM|WGM|WIM|WFM|NM|CM|WCM|WNM|AGM|HGM)\s+/i;
-const stripTitle = (n) => (n || '').trim().replace(TITLE_RE, '');
-const nameKey = (n) => stripTitle(n).toLowerCase();
+export const stripTitle = (n) => (n || '').trim().replace(TITLE_RE, '');
+export const nameKey = (n) => stripTitle(n).toLowerCase();
 
 function buildGameLookup() {
     const games = getDatasetGames();

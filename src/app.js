@@ -73,6 +73,7 @@ import { openCollectionBrowser } from './collection-browser.js';
 import { queryGames, prefetchGames } from './tnm.js';
 import { formatName, getHeader, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
+import { initEstimator, openEstimator } from './estimator.js';
 import { openGifMaker } from './gif-maker.js'; // also registers #gif hash trigger + window.openGifMaker
 
 // Signal the index.html boot watchdog: the bundle loaded and evaluated.
@@ -362,6 +363,7 @@ document.addEventListener('keydown', (e) => {
 const ACTIONS = {
     'open-settings': () => openSettings(),
     'open-style': () => openSettings('style'),
+    'open-estimator': () => openEstimator(),
     'open-about': () => openSettings('about'),
     'open-privacy': () => openSettings('about', { privacy: true }),
     // Navbar Profile: your own stats and games one tap away. Without a
@@ -738,6 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     initPlayerProfile(document.getElementById('profile-mount'));
+    initEstimator(document.getElementById('estimator-mount'));
 
     // First-visit onboarding: the settings panel opens on About, whose
     // "Set up your name →" button leads into the You tab.
