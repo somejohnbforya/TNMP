@@ -3737,7 +3737,13 @@ export const flipBoard = () => {
         renderEvalBar(_activeTab.pvInfos[0], _activeTab.game.getCurrentFen());
 };
 export const setBoardOrientation = (color) => _activeTab.board.setOrientation(color);
-export const setBoardCoordinates = (show) => _activeTab.board?.setCoordinates(show);
+// Persist before touching boards: the settings panel opens without a
+// loaded game (always, on mobile), so there may be no board to update —
+// the preference must survive anyway for boards created later.
+export const setBoardCoordinates = (show) => {
+    localStorage.setItem('boardCoords', show);
+    for (const tab of _tabs) tab.board?.setCoordinates(show);
+};
 export const getActiveTabEl = () => _activeTab?.el;
 export const getActiveTabGame = () => {
     const gameId = _activeTab?.panel?.gameId;

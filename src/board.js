@@ -150,7 +150,6 @@ export function createBoard(container, { onMove, onDraw, orientation = 'white', 
     return {
         setCoordinates(show) {
             cg.set({ coordinates: show });
-            localStorage.setItem('boardCoords', show);
         },
 
         setPosition(fen, animate = true) {
