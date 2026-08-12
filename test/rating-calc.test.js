@@ -6,6 +6,7 @@ import {
     specialRating,
     standardRating,
     estimateRating,
+    ratingFloor,
 } from '../src/rating-calc.js';
 
 function game(oppRating, score) {
@@ -143,6 +144,27 @@ describe('specialRating', () => {
     });
 });
 
+describe('ratingFloor', () => {
+    it('is peak minus 200 rounded down to the nearest 100', () => {
+        expect(ratingFloor(1400)).toBe(1200);
+        expect(ratingFloor(1550)).toBe(1300);
+        expect(ratingFloor(1856)).toBe(1600);
+        expect(ratingFloor(2099)).toBe(1800);
+    });
+
+    it('gives only the absolute floor below a 1400 peak', () => {
+        expect(ratingFloor(1399)).toBe(100);
+        expect(ratingFloor(900)).toBe(100);
+        expect(ratingFloor(null)).toBe(100);
+        expect(ratingFloor(undefined)).toBe(100);
+    });
+
+    it('caps at the 2100 maximum peak-based floor', () => {
+        expect(ratingFloor(2310)).toBe(2100);
+        expect(ratingFloor(2750)).toBe(2100);
+    });
+});
+
 describe('estimateRating', () => {
     it('routes provisional players to the special algorithm', () => {
         const r = estimateRating(1300, 0, [game(1520, 1)]);
@@ -176,5 +198,36 @@ describe('estimateRating', () => {
 
     it('returns null when nothing has been played', () => {
         expect(estimateRating(1500, 30, [game(1600, null)])).toBeNull();
+    });
+
+    it('holds a losing result at the supplied floor', () => {
+        const losses = [game(1500, 0), game(1550, 0), game(1600, 0), game(1650, 0)];
+        const free = estimateRating(1620, 30, losses);
+        expect(free.rating).toBeLessThan(1600);
+        expect(free.floored).toBe(false);
+        const held = estimateRating(1620, 30, losses, 1600);
+        expect(held.rating).toBe(1600);
+        expect(held.change).toBe(-20);
+        expect(held.floored).toBe(true);
+        expect(held.rawRating).toBeCloseTo(free.rating, 10);
+    });
+
+    it('leaves the floor untouched when the result clears it', () => {
+        const r = estimateRating(1620, 30, [game(1500, 1)], 1600);
+        expect(r.floored).toBe(false);
+        expect(r.rating).toBeGreaterThan(1620);
+    });
+
+    it('applies the absolute 100 floor to the standard algorithm', () => {
+        // A low-rated player losing everything: K is huge (N' ≈ 7.5 at
+        // R0=150) and the raw update would land below 100.
+        const r = estimateRating(150, 20, [game(100, 0), game(100, 0), game(100, 0), game(100, 0)]);
+        expect(r.rating).toBe(100);
+        expect(r.floored).toBe(true);
+    });
+
+    it('a floor below the absolute floor is ignored', () => {
+        const r = estimateRating(150, 20, [game(100, 0), game(100, 0), game(100, 0), game(100, 0)], 0);
+        expect(r.rating).toBe(100);
     });
 });

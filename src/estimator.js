@@ -55,7 +55,21 @@ function loadPlayer(si, pi) {
 
     document.getElementById('est-rating').value = p.rating ?? '';
     document.getElementById('est-prior').value = p.rating == null ? 0 : '';
+    document.getElementById('est-floor').value = '';
+    updateFloorHint(p);
     render();
+}
+
+// US Chess publishes each member's floor (including money-prize and
+// Life Master floors we could never derive) on their MUIR player page,
+// so the hint links straight to the selected player's page.
+function updateFloorHint(p) {
+    const hint = document.getElementById('est-floor-hint');
+    const id = p?.id && /^\d+$/.test(p.id) ? p.id : null;
+    const lookup = id
+        ? `<a href="https://ratings.uschess.org/player/${id}" target="_blank" rel="noopener">${esc(stripTitle(p.name))}'s US Chess page</a>`
+        : 'the US Chess member page';
+    hint.innerHTML = `Floor: check ${lookup} — usually peak rating − 200; leave blank if none.`;
 }
 
 function findTracked() {
@@ -107,8 +121,10 @@ function compute() {
     const unrated = ratingRaw === '';
     const r0 = unrated ? 1300 : parseInt(ratingRaw, 10);
     const prior = unrated ? 0 : priorRaw === '' ? ESTABLISHED_N : Math.max(0, parseInt(priorRaw, 10) || 0);
+    const floorRaw = parseInt(document.getElementById('est-floor').value, 10);
+    const floor = Number.isFinite(floorRaw) ? floorRaw : 100;
 
-    const res = Number.isFinite(r0) ? estimateRating(r0, prior, _rows) : null;
+    const res = Number.isFinite(r0) ? estimateRating(r0, prior, _rows, floor) : null;
     if (!res) {
         out.innerHTML = '<p class="est-empty">Enter results above to see an estimate.</p>';
         return;
@@ -121,10 +137,12 @@ function compute() {
             ? '<span class="est-result-badge">first rating</span>'
             : `<span class="est-result-change ${change >= 0 ? 'est-up' : 'est-down'}">${change >= 0 ? '+' : '−'}${Math.abs(change).toFixed(1)}</span>`;
     const scored = _rows.reduce((s, g) => s + (g.score ?? 0), 0);
-    const detail = res.provisional
-        ? `provisional formula · scored ${scored} of ${_rows.length} · expected ${res.expected.toFixed(2)}`
-        : `scored ${scored} of ${_rows.length} · expected ${res.expected.toFixed(2)} · K ${res.k.toFixed(1)}` +
-          (res.bonus > 0 ? ` · bonus +${res.bonus.toFixed(1)}` : '');
+    const detail =
+        (res.provisional
+            ? `provisional formula · scored ${scored} of ${_rows.length} · expected ${res.expected.toFixed(2)}`
+            : `scored ${scored} of ${_rows.length} · expected ${res.expected.toFixed(2)} · K ${res.k.toFixed(1)}` +
+              (res.bonus > 0 ? ` · bonus +${res.bonus.toFixed(1)}` : '')) +
+        (res.floored ? ` · held at floor ${floor} (unfloored ${Math.round(res.rawRating)})` : '');
 
     out.innerHTML = `
         <div class="est-result-main">
@@ -181,6 +199,8 @@ export async function openEstimator() {
         _skipped = 0;
         document.getElementById('est-rating').value = '';
         document.getElementById('est-prior').value = '';
+        document.getElementById('est-floor').value = '';
+        updateFloorHint(null);
         render();
     }
     openModal('estimator-modal');
@@ -199,20 +219,25 @@ export function initEstimator(mount) {
                 </div>
                 <div class="est-inputs">
                     <div class="setting-group">
-                        <label for="est-rating">Current rating</label>
+                        <label for="est-rating">Rating</label>
                         <input type="number" id="est-rating" min="100" max="3000" placeholder="unrated">
                     </div>
                     <div class="setting-group">
-                        <label for="est-prior">Prior rated games</label>
+                        <label for="est-prior">Prior games</label>
                         <input type="number" id="est-prior" min="0" max="999" placeholder="25+">
+                    </div>
+                    <div class="setting-group">
+                        <label for="est-floor">Floor</label>
+                        <input type="number" id="est-floor" min="100" max="2200" placeholder="none">
                     </div>
                 </div>
                 <p class="setting-hint">Leave games blank if established. 8 or fewer uses the provisional formula, like the official estimator.</p>
+                <p id="est-floor-hint" class="setting-hint"></p>
                 <div id="est-rows" class="est-rows"></div>
                 <p id="est-skip-note" class="setting-hint hidden">Byes and forfeits aren't rated, so they were left out.</p>
                 <button type="button" id="est-add" class="modal-btn modal-btn-secondary modal-btn-small">+ Add a game</button>
                 <div id="est-result" class="est-result raised-panel"></div>
-                <p class="setting-hint est-footnote">First-pass estimate per the US Chess rating system (July 2025 revision, bonus threshold 10). Rating floors and multi-pass recalculation are not modeled.</p>
+                <p class="setting-hint est-footnote">First-pass estimate per the US Chess rating system (July 2025 revision, bonus threshold 10). Multi-pass recalculation is not modeled.</p>
             </div>
         </div>`;
 

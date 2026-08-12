@@ -5,12 +5,26 @@
  * "The US Chess Rating System" (Glickman & Doan, revised July 2025):
  * winning expectancy, effective games, K = 800/(N' + m), bonus points
  * with the B = 10 threshold, and the piecewise-linear special rating
- * for players with 8 or fewer prior games. Rating floors and money
- * floors are intentionally not modeled, matching the official
- * US Chess Rating Estimator.
+ * for players with 8 or fewer prior games. Peak-based rating floors
+ * (highest attained rating minus 200) are applied when a floor is
+ * supplied; money-prize and Original Life Master floors depend on
+ * facts no rating history can reveal, so callers must pass those in.
  */
 
 export const BONUS_B = 10;
+
+// Every rating has this floor, even without a peak-based one.
+export const ABSOLUTE_FLOOR = 100;
+
+/**
+ * Peak-based rating floor: highest attained rating minus 200, rounded
+ * down to the nearest 100. Peak-based floors exist from 1200 to 2100,
+ * so a peak under 1400 leaves only the absolute floor.
+ */
+export function ratingFloor(peak) {
+    if (!Number.isFinite(peak) || peak < 1400) return ABSOLUTE_FLOOR;
+    return Math.min(2100, Math.floor((peak - 200) / 100) * 100);
+}
 
 /** Expected score for a player rated r against an opponent rated oppR. */
 export function winningExpectancy(r, oppR) {
@@ -113,26 +127,35 @@ export function standardRating(r0, priorGames, games) {
 
 /**
  * Full estimate. Picks the special algorithm for provisional players
- * (8 or fewer prior games) and the standard one otherwise, mirroring
- * the official US Chess Rating Estimator.
+ * (8 or fewer prior games) and the standard one otherwise, then holds
+ * the result at the player's rating floor (the absolute 100 floor when
+ * no peak-based floor is passed).
  *
- * Returns { rating, change, provisional, k, expected, bonus } where
- * rating is unrounded; display code rounds to the nearest integer.
+ * Returns { rating, rawRating, change, provisional, k, expected,
+ * bonus, floored } where rating is unrounded, floored means the floor
+ * engaged, and rawRating is the pre-floor value; display code rounds
+ * to the nearest integer.
  */
-export function estimateRating(r0, priorGames, games) {
+export function estimateRating(r0, priorGames, games, floor = ABSOLUTE_FLOOR) {
     const played = games.filter((g) => g.score != null && Number.isFinite(g.oppRating));
     if (played.length === 0) return null;
+
+    let result;
     if (priorGames <= 8) {
         const rating = specialRating(r0, priorGames, played);
-        return {
+        result = {
             rating,
-            change: rating - r0,
             provisional: true,
             k: null,
             expected: played.reduce((sum, g) => sum + provisionalExpectancy(r0, g.oppRating), 0),
             bonus: 0,
         };
+    } else {
+        result = { ...standardRating(r0, priorGames, played), provisional: false };
     }
-    const result = standardRating(r0, priorGames, played);
-    return { ...result, provisional: false };
+
+    const held = Math.max(floor, ABSOLUTE_FLOOR);
+    const floored = result.rating < held;
+    const rating = floored ? held : result.rating;
+    return { ...result, rating, rawRating: result.rating, change: rating - r0, floored };
 }
