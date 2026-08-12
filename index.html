@@ -136,9 +136,9 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
             <span>Games</span>
         </button>
-        <button type="button" class="nav-item" data-action="nav-profile">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>
-            <span>Profile</span>
+        <button type="button" class="nav-item" data-action="nav-tools">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <span>Tools</span>
         </button>
         <button type="button" class="nav-item" data-action="open-settings">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -220,6 +220,28 @@
 
     <div id="estimator-mount" class="tnmp"></div>
 
+    <!-- Tools sheet — the navbar's home for standalone features -->
+    <div id="tools-modal" class="modal hidden tnmp" role="dialog" aria-label="Tools" aria-modal="true">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content tools-sheet">
+            <h2 class="tools-title">Tools</h2>
+            <button type="button" class="tools-item" data-action="tools-estimator">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="11" x2="8" y2="11.01"/><line x1="12" y1="11" x2="12" y2="11.01"/><line x1="16" y1="11" x2="16" y2="11.01"/><line x1="8" y1="15" x2="8" y2="15.01"/><line x1="12" y1="15" x2="12" y2="15.01"/><line x1="16" y1="15" x2="16" y2="18"/></svg>
+                <span class="tools-item-text">
+                    <span class="tools-item-name">Rating Estimator</span>
+                    <span class="tools-item-desc">What your TNM results do to your US Chess rating</span>
+                </span>
+            </button>
+            <button type="button" class="tools-item" data-action="tools-video">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 4v16M17 4v16M2 9h5M2 15h5M17 9h5M17 15h5"/></svg>
+                <span class="tools-item-text">
+                    <span class="tools-item-name">Video Maker</span>
+                    <span class="tools-item-desc">Share a game as a video or GIF</span>
+                </span>
+            </button>
+        </div>
+    </div>
+
     <!-- GIF Maker Modal -->
     <div id="gif-maker-modal" class="modal hidden" role="dialog" aria-labelledby="gif-maker-title" aria-modal="true">
         <div class="modal-backdrop"></div>
@@ -229,9 +251,8 @@
 
             <div class="gif-maker-body">
 
-                <!-- ─── LEFT: inputs + style + behavior ─── -->
-                <div class="gif-maker-inputs">
-
+                <!-- ─── PGN input (mobile: preview follows directly) ─── -->
+                <div class="gif-maker-pgn">
                     <label class="gif-maker-label" for="gif-pgn-input">PGN</label>
                     <textarea
                         id="gif-pgn-input"
@@ -240,7 +261,10 @@
                         spellcheck="false"
                         autocomplete="off"></textarea>
                     <div id="gif-pgn-status" class="gif-pgn-status"></div>
+                </div>
 
+                <!-- ─── Style + behavior options ─── -->
+                <div class="gif-maker-options">
                     <label class="gif-maker-label">Pieces</label>
                     <div id="gif-pieces-dropdown" class="style-dropdown">
                         <button type="button" class="style-dropdown-trigger"></button>
@@ -295,7 +319,7 @@
                     </div>
                 </div>
 
-                <!-- ─── RIGHT: stage (preview ↔ result) + action ─── -->
+                <!-- ─── Stage (preview ↔ result) + action ─── -->
                 <div class="gif-maker-output">
 
                     <div class="gif-stage raised-panel">

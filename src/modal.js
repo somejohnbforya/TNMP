@@ -49,11 +49,14 @@ export function closeModal(modalId) {
             document.body.style.overflow = '';
             const container = document.querySelector('.container');
             if (container) container.removeAttribute('aria-hidden');
-        }
 
-        const prev = previousFocus.get(modalId);
-        if (prev && typeof prev.focus === 'function') {
-            prev.focus();
+            // Restore focus only when this was the last modal standing —
+            // in a close-then-open handoff (tools sheet → estimator) the
+            // new modal owns focus, and this close must not steal it back.
+            const prev = previousFocus.get(modalId);
+            if (prev && typeof prev.focus === 'function') {
+                prev.focus();
+            }
         }
         previousFocus.delete(modalId);
     };

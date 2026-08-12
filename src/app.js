@@ -12,7 +12,7 @@ import {
 } from './ui.js';
 import { openSettings, saveSettings, initSettings } from './settings.js';
 import { initStyle } from './style.js';
-import { closeModal, trapFocus } from './modal.js';
+import { openModal, closeModal, trapFocus } from './modal.js';
 import { enablePush, disablePush, syncPushSubscription } from './push.js';
 import {
     closeGamePanel,
@@ -366,11 +366,14 @@ const ACTIONS = {
     'open-estimator': () => openEstimator(),
     'open-about': () => openSettings('about'),
     'open-privacy': () => openSettings('about', { privacy: true }),
-    // Navbar Profile: your own stats and games one tap away. Without a
-    // name set, the settings You tab (name search focused) is the answer.
-    'nav-profile': () => {
-        if (CONFIG.playerName) openPlayerProfile(CONFIG.playerName);
-        else openSettings();
+    'nav-tools': () => openModal('tools-modal'),
+    'tools-estimator': () => {
+        closeModal('tools-modal');
+        openEstimator();
+    },
+    'tools-video': () => {
+        closeModal('tools-modal');
+        openGifMaker();
     },
     'save-settings': () => saveSettings(wrappedCheckPairings),
     'enable-push': enablePush,

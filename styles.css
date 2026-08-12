@@ -6477,11 +6477,27 @@ input.browser-search-input {
 .gif-maker-body {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1.25rem;
+    /* Row 2 takes the stage's excess height, keeping the PGN and
+       options rows snug instead of drifting apart. */
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+        'pgn stage'
+        'options stage';
+    gap: 0 1.25rem;
     align-items: start;
 }
+.gif-maker-pgn { grid-area: pgn; }
+.gif-maker-options { grid-area: options; }
+.gif-maker-output { grid-area: stage; }
+/* Stacked on phones, the stage follows the PGN — the preview and the
+   Generate button are the payoff; style tweaks come after. */
 @media (max-width: 720px) {
-    .gif-maker-body { grid-template-columns: 1fr; }
+    .gif-maker-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto;
+        grid-template-areas: 'pgn' 'stage' 'options';
+    }
+    .gif-maker-output { margin-top: 0.85rem; }
 }
 
 .gif-maker-label {
@@ -6493,7 +6509,7 @@ input.browser-search-input {
     margin: 0.85rem 0 0.4rem;
     font-weight: 600;
 }
-.gif-maker-inputs > .gif-maker-label:first-child { margin-top: 0; }
+.gif-maker-pgn > .gif-maker-label:first-child { margin-top: 0; }
 
 /* ── Inputs column ── */
 
@@ -6606,7 +6622,9 @@ input.browser-search-input {
     font-size: 0.78rem;
     overflow: hidden;
 }
-.gif-preview:empty::before { content: 'preview'; }
+.gif-preview:empty::before { content: 'Paste a PGN to see your video here'; }
+/* No frames yet: keep the scrubber row's space but not its dead 0/0 UI */
+.gif-preview-pane:has(.gif-preview:empty) .gif-scrubber-wrap { visibility: hidden; }
 .gif-preview svg {
     width: 100%;
     height: 100%;
@@ -6930,4 +6948,64 @@ video.gif-result-img { background: #000; }
 
 .est-footnote {
     margin-top: 0.75rem;
+}
+
+/* ── Tools sheet ────────────────────────────────────────────────── */
+
+.tools-sheet {
+    max-width: 380px;
+    width: calc(100vw - 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.tools-title {
+    margin: 0 0 0.25rem;
+    font-size: 1.3rem;
+}
+
+.tools-item {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    width: 100%;
+    padding: 0.85rem 1rem;
+    text-align: left;
+    border: 2px solid rgb(from var(--foreground) r g b / 0.12);
+    border-radius: var(--radius-sm);
+    background: var(--overlay-light);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: border-color var(--transition-fast);
+}
+
+.tools-item:hover,
+.tools-item:focus-visible {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.tools-item svg {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    color: var(--accent);
+}
+
+.tools-item-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.tools-item-name {
+    font-weight: 600;
+}
+
+.tools-item-desc {
+    font-size: 0.8rem;
+    color: var(--text-faint);
+    line-height: 1.35;
 }
