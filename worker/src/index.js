@@ -9,7 +9,7 @@
  *   cron.js       — scheduled HTML fetching, caching, D1 ingestion, push dispatch
  */
 
-import { corsHeaders, corsResponse } from './helpers.js';
+import { corsHeaders, corsResponse, isAdminRequest } from './helpers.js';
 import { handleTournamentHtml, handleTournamentState, handleStandings, handleOgState, handleHealth } from './tournament.js';
 import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco } from './games.js';
 import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest, handlePushAck, handlePushClick } from './push.js';
@@ -68,25 +68,29 @@ export default {
             if (path === '/push-ack' && request.method === 'GET') return await handlePushAck(request, env);
             if (path === '/push-click' && request.method === 'GET') return await handlePushClick(request, env);
 
-            // Manual cron trigger (bypasses time guard, auth temporarily removed)
+            // Manual cron trigger (bypasses time guard). Admin-only.
             if (path === '/cron' && request.method === 'POST') {
+                if (!isAdminRequest(request, env)) return corsResponse({ error: 'Unauthorized' }, 401, env, request);
                 try {
                     await handleScheduled(env, { force: true });
                     return corsResponse({ ok: true }, 200, env, request);
                 } catch (err) {
-                    return corsResponse({ error: err.message, stack: err.stack }, 500, env, request);
+                    console.error('Manual cron failed:', err);
+                    return corsResponse({ error: err.message }, 500, env, request);
                 }
             }
 
             // Manual USCF discovery trigger. ?refresh=<slug> re-fetches metadata
             // for a specific tournament (bypasses normal candidate filters).
             if (path === '/uscf-discovery' && request.method === 'POST') {
+                if (!isAdminRequest(request, env)) return corsResponse({ error: 'Unauthorized' }, 401, env, request);
                 try {
                     const refreshSlug = url.searchParams.get('refresh') || undefined;
                     const results = await runUscfDiscovery(env, { refreshSlug });
                     return corsResponse({ ok: true, ...results }, 200, env, request);
                 } catch (err) {
-                    return corsResponse({ error: err.message, stack: err.stack }, 500, env, request);
+                    console.error('USCF discovery failed:', err);
+                    return corsResponse({ error: err.message }, 500, env, request);
                 }
             }
 

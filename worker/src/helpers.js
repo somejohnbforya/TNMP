@@ -172,3 +172,67 @@ export function validateGameId(url, env, request) {
     return { gameId, error: null };
 }
 
+
+// --- Security helpers (added 2026-08-25, security-hardening pass) ---
+
+// Web Push endpoints must belong to a real push service. Without this check,
+// /push-subscribe would let anyone register an arbitrary URL that the worker
+// then POSTs to on every cron dispatch — outbound-request abuse, and a lever to
+// flood the subscriber set (bogus tokens at a real host 410 and self-clean).
+const PUSH_HOSTS_EXACT = new Set([
+    'fcm.googleapis.com',
+    'android.googleapis.com',
+    'web.push.apple.com',
+    'updates.push.services.mozilla.com',
+]);
+const PUSH_HOST_SUFFIXES = [
+    '.push.services.mozilla.com', // Mozilla autopush shards
+    '.notify.windows.com',        // WNS (Edge / Windows)
+    '.push.apple.com',            // Apple web-push shards
+];
+
+export function isAllowedPushEndpoint(endpoint) {
+    let url;
+    try { url = new URL(endpoint); } catch { return false; }
+    if (url.protocol !== 'https:') return false;
+    const host = url.hostname.toLowerCase();
+    if (PUSH_HOSTS_EXACT.has(host)) return true;
+    return PUSH_HOST_SUFFIXES.some(s => host.endsWith(s) && host.length > s.length);
+}
+
+// Constant-time string compare — avoids leaking a secret prefix match via
+// early-return timing. Length mismatch returns fast (length is not the secret).
+export function timingSafeEqualStr(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    const enc = new TextEncoder();
+    const ab = enc.encode(a);
+    const bb = enc.encode(b);
+    if (ab.length !== bb.length) return false;
+    let diff = 0;
+    for (let i = 0; i < ab.length; i++) diff |= ab[i] ^ bb[i];
+    return diff === 0;
+}
+
+// The admin secret gates manual/privileged endpoints. Prefer a dedicated
+// ADMIN_TOKEN so it can rotate independently of the VAPID signing key; fall
+// back to VAPID_PRIVATE_KEY so existing deployments keep working until an
+// ADMIN_TOKEN is provisioned.
+export function adminSecret(env) {
+    return env.ADMIN_TOKEN || env.VAPID_PRIVATE_KEY || null;
+}
+
+// Authorize a privileged request. The token may arrive as
+// `Authorization: Bearer <token>` or (for JSON POSTs that already carry it) as
+// an explicit body value passed in `presentedToken`.
+export function isAdminRequest(request, env, presentedToken = null) {
+    const secret = adminSecret(env);
+    if (!secret) return false;
+    let token = presentedToken;
+    if (!token) {
+        const auth = request.headers.get('Authorization') || '';
+        const m = auth.match(/^Bearer\s+(.+)$/);
+        token = m ? m[1] : null;
+    }
+    if (!token) return false;
+    return timingSafeEqualStr(token, secret);
+}

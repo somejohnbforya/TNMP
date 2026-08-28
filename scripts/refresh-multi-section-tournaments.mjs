@@ -13,6 +13,15 @@ const API = 'https://api.tnmpairings.com';
 const DELAY_MS = 1500; // be gentle with USCF
 const MAX_RETRIES = 2;
 
+// /uscf-discovery is admin-gated. Provide the token via env:
+//   ADMIN_TOKEN=... node scripts/refresh-multi-section-tournaments.mjs
+// (falls back to VAPID_PRIVATE_KEY, the current admin secret).
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || process.env.VAPID_PRIVATE_KEY;
+if (!ADMIN_TOKEN) {
+    console.error('Set ADMIN_TOKEN (or VAPID_PRIVATE_KEY) in the environment.');
+    process.exit(1);
+}
+
 async function fetchAll() {
     const res = await fetch(`${API}/tournaments`);
     return (await res.json()).tournaments;
@@ -21,6 +30,7 @@ async function fetchAll() {
 async function refreshOne(slug) {
     const resp = await fetch(`${API}/uscf-discovery?refresh=${encodeURIComponent(slug)}`, {
         method: 'POST',
+        headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     return resp.json();

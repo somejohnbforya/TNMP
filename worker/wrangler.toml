@@ -11,9 +11,6 @@ workers_dev = false
 # Windows cover both PST (UTC-8) and PDT (UTC-7) — starts 1h early in PST, harmless.
 crons = ["* 2-8 * * TUE", "*/5 2-8 * * WED", "*/20 * * * *", "0 20 * * *"]
 
-[vars]
-ALLOWED_ORIGIN = "https://tnmpairings.com"
-
 [[kv_namespaces]]
 binding = "SUBSCRIBERS"
 id = "69d27221bb904515958233a6c9481e75"

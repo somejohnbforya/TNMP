@@ -1,4 +1,4 @@
-import { corsResponse, corsHeaders } from './helpers.js';
+import { corsResponse, corsHeaders, isAllowedPushEndpoint, isAdminRequest } from './helpers.js';
 import { sendPushNotification } from './webpush.js';
 
 const KV_TTL = 7776000; // 90 days in seconds
@@ -27,6 +27,11 @@ export async function handlePushSubscribe(request, env) {
     if (!subscription || !subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
         return corsResponse({ success: false, error: 'Invalid push subscription' }, 400, env, request);
     }
+    // The worker POSTs to subscription.endpoint on every cron dispatch — it must
+    // be a real push service, never an attacker-chosen URL.
+    if (!isAllowedPushEndpoint(subscription.endpoint)) {
+        return corsResponse({ success: false, error: 'Unsupported push endpoint' }, 400, env, request);
+    }
 
     const key = deviceId ? deviceKey(deviceId) : await legacyKey(subscription.endpoint);
     const existing = await env.SUBSCRIBERS.get(key, 'json');
@@ -49,7 +54,7 @@ export async function handlePushSubscribe(request, env) {
     }
 
     await putRecord(env, key, {
-        playerName: (playerName || '').trim(),
+        playerName: (playerName || '').trim().slice(0, 80),
         deviceLabel: deviceLabel || existing?.deviceLabel || null,
         notifyPairings: notifyPairings !== undefined ? notifyPairings !== false : existing?.notifyPairings !== false,
         notifyResults: notifyResults !== undefined ? notifyResults !== false : existing?.notifyResults !== false,
@@ -164,7 +169,7 @@ export async function handlePushClick(request, env) {
 export async function handlePushTest(request, env) {
     const { type, key: authKey } = await request.json();
 
-    if (!authKey || authKey !== env.VAPID_PRIVATE_KEY) {
+    if (!isAdminRequest(request, env, authKey)) {
         return corsResponse({ error: 'Unauthorized' }, 403, env, request);
     }
 

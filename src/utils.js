@@ -120,3 +120,18 @@ export function closeAllMenus(exceptEl = null) {
         if (el !== exceptEl) closeMenu(el);
     }
 }
+
+// HTML-escape a value for safe interpolation into innerHTML. Null-safe.
+export function escapeHtml(s) {
+    return String(s ?? '').replace(
+        /[&<>"']/g,
+        (c) =>
+            ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;',
+            })[c],
+    );
+}

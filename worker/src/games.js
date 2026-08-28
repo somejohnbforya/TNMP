@@ -5,7 +5,7 @@
  *          /eco-classify, /submit-game
  */
 
-import { corsResponse, corsHeaders, normalizePlayerName, formatPlayerName, resolveCurrentSlug, validateGameId, extractRatingFloor, floorFromPeak } from './helpers.js';
+import { corsResponse, corsHeaders, normalizePlayerName, formatPlayerName, resolveCurrentSlug, validateGameId, extractRatingFloor, floorFromPeak, isAdminRequest } from './helpers.js';
 import { classifyOpening, replayToFen, classifyFen } from './eco.js';
 import ecoEpd from './eco-epd.json';
 import { generateBoardSvg } from './og-board.js';
@@ -495,9 +495,8 @@ export async function handleSubmitGame(request, env) {
 // --- ECO Backfill ---
 
 export async function handleBackfillEco(request, env) {
-    // Auth: require VAPID private key (same as /cron and /push-test)
-    const auth = request.headers.get('Authorization');
-    if (!auth || auth !== `Bearer ${env.VAPID_PRIVATE_KEY}`) {
+    // Auth: admin secret (ADMIN_TOKEN, falling back to VAPID_PRIVATE_KEY).
+    if (!isAdminRequest(request, env)) {
         return corsResponse({ error: 'Unauthorized' }, 401, env, request);
     }
 

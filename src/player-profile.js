@@ -1,4 +1,5 @@
 import { openModal, closeModal, onModalClose } from './modal.js';
+import { escapeHtml } from './utils.js';
 import { selectPlayer } from './games.js';
 import { queryGames } from './tnm.js';
 // openViewer = openGamePanel (opens modal + board + explorer mode)
@@ -117,9 +118,10 @@ function profileRow(
 ) {
     const t = total(s);
     const cls = compact ? 'profile-row profile-row-compact' : 'profile-row';
+    const safeLabel = escapeHtml(label);
     const nameEl = profileName
-        ? `<span class="profile-row-name profile-row-link" data-action-profile="${profileName}">${label}</span>`
-        : `<span class="profile-row-name">${label}</span>`;
+        ? `<span class="profile-row-name profile-row-link" data-action-profile="${escapeHtml(profileName)}">${safeLabel}</span>`
+        : `<span class="profile-row-name">${safeLabel}</span>`;
     return `<button class="${cls}" ${actionAttr}='${action.replace(/'/g, '&#39;')}'>
         <div class="profile-row-label">
             ${icon ? `<img class="profile-color-icon" src="/pieces/${icon}" alt="">` : ''}
@@ -295,9 +297,10 @@ export async function openPlayerProfile(playerName) {
         const rating = result.playerRating;
 
         // Title with rating + USCF link
-        const nameText = rating ? `${playerName} (${rating})` : playerName;
+        const safeName = escapeHtml(playerName);
+        const nameText = rating ? `${safeName} (${escapeHtml(rating)})` : safeName;
         title.innerHTML = currentUscfId
-            ? `${nameText} <a href="https://ratings.uschess.org/player/${currentUscfId}" target="_blank" rel="noopener" class="profile-uscf-link">USCF</a>`
+            ? `${nameText} <a href="https://ratings.uschess.org/player/${encodeURIComponent(currentUscfId)}" target="_blank" rel="noopener" class="profile-uscf-link">USCF</a>`
             : nameText;
 
         const games = _profileData.games;
