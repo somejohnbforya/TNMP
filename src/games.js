@@ -623,6 +623,31 @@ export function getCachedGame(gameId) {
     return null;
 }
 
+/**
+ * If some already-loaded dataset covers every requested tournament slug (e.g. a
+ * wider range is in memory), return its games filtered to those slugs — so
+ * narrowing the slider filters the cache instead of re-fetching. Player
+ * datasets are skipped (one player's games, never a complete tournament).
+ * Returns null when no loaded dataset covers the whole set.
+ */
+export function getCachedGamesForSlugs(slugs) {
+    const want = new Set(slugs);
+    if (want.size === 0) return null;
+    for (const d of _datasetCache.values()) {
+        if (d.playerName) continue;
+        const have = new Set(d.games.map((game) => game.tournamentSlug));
+        let covers = true;
+        for (const s of want) {
+            if (!have.has(s)) {
+                covers = false;
+                break;
+            }
+        }
+        if (covers) return d.games.filter((game) => want.has(game.tournamentSlug));
+    }
+    return null;
+}
+
 export function getOrientationForGame(game) {
     const norm = _activeDs()?.playerNorm;
     if (!norm || !game) return 'White';

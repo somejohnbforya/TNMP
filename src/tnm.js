@@ -7,7 +7,7 @@
  */
 
 import { WORKER_URL } from './config.js';
-import { ingestDataset, setPlayerList } from './games.js';
+import { ingestDataset, setPlayerList, getCachedGamesForSlugs } from './games.js';
 
 // ─── State ────────────────────────────────────────────────────────
 
@@ -158,6 +158,20 @@ export async function fetchPlayerGames(name, norm) {
  */
 export async function switchToRange({ slugs, lo, hi, tournaments }) {
     const gen = ++_fetchGeneration;
+    const label = lo === hi ? `TNM ${lo}` : `TNM ${lo}\u2013${hi}`;
+
+    // Cache-first: if a wider range covering these tournaments is already loaded,
+    // filter it in memory instead of re-fetching from the API.
+    const cached = getCachedGamesForSlugs(slugs);
+    if (cached) {
+        _activeTournamentSlug = `range:${lo}-${hi}`;
+        ingestDataset(
+            `tournament:range:${lo}-${hi}`,
+            { games: cached, events: [], meta: { name: label } },
+            { defaultRound: false, skipIdbWrite: true },
+        );
+        return;
+    }
 
     const CHUNK = 8000;
     const list =
@@ -185,7 +199,6 @@ export async function switchToRange({ slugs, lo, hi, tournaments }) {
     if (gen !== _fetchGeneration) return;
 
     const games = parts.flatMap((p) => p.games);
-    const label = lo === hi ? `TNM ${lo}` : `TNM ${lo}\u2013${hi}`;
     _activeTournamentSlug = `range:${lo}-${hi}`;
     // events: [] keeps this a plain dataset (multi-tournament would otherwise
     // trip the "Imported Games" event machinery and rename the title).
