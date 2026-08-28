@@ -104,7 +104,7 @@ const PREVIEW_HIDE_DELAY_MS = 250; // delay after mouse leaves — gives time to
  * @param {() => string|null} opts.getActiveSlug - returns currently-selected slug (for highlighting)
  * @param {(slug: string) => void} opts.onSelect - called when user picks a tournament
  */
-export function createTournamentMenu({ trigger, getTournaments, getActiveSlug, onSelect }) {
+export function createTournamentMenu({ trigger, getTournaments, getActiveSlug, onSelect, onSelectRange }) {
     // Mount inside the nearest modal (respects its focus trap). We avoid
     // mounting inside .modal-content-viewer because its `transform`/`filter`
     // creates a containing block that breaks `position: fixed` positioning.
@@ -132,6 +132,7 @@ export function createTournamentMenu({ trigger, getTournaments, getActiveSlug, o
             <div class="tm-range-ticks"></div>
         </div>
         <div class="tm-list"></div>
+        <button type="button" class="tm-range-explore hidden"></button>
         <p class="tm-count"></p>
     `;
     container.appendChild(popover);
@@ -150,6 +151,7 @@ export function createTournamentMenu({ trigger, getTournaments, getActiveSlug, o
     const rangeLoEl = popover.querySelector('.tm-range-lo');
     const rangeHiEl = popover.querySelector('.tm-range-hi');
     const rangeTicksEl = popover.querySelector('.tm-range-ticks');
+    const rangeExploreEl = popover.querySelector('.tm-range-explore');
 
     // Per-instance state
     let items = []; // [{ el, row, year, tournament }]
@@ -305,6 +307,19 @@ export function createTournamentMenu({ trigger, getTournaments, getActiveSlug, o
         const visible = items.filter((it) => !it.el.classList.contains('hidden'));
         countEl.textContent =
             visible.length === items.length ? `${items.length} tournaments` : `${visible.length} of ${items.length}`;
+
+        // "Explore all games in range" affordance — reflects the current visible set.
+        if (onSelectRange && visible.length >= 2) {
+            const totalGames = visible.reduce((n, it) => n + (it.tournament.gameCount || 0), 0);
+            const lo = parseInt(rangeLoEl.value);
+            const hi = parseInt(rangeHiEl.value);
+            const span = lo === hi ? `${lo}` : `${lo}\u2013${hi}`;
+            const gamesLabel = totalGames ? `${totalGames.toLocaleString()} games` : `${visible.length} tournaments`;
+            rangeExploreEl.textContent = `Explore ${gamesLabel} \u00b7 ${span}`;
+            rangeExploreEl.classList.remove('hidden');
+        } else {
+            rangeExploreEl.classList.add('hidden');
+        }
 
         if (focusIdx >= 0 && items[focusIdx]?.el.classList.contains('hidden')) {
             clearFocus();
@@ -599,6 +614,21 @@ export function createTournamentMenu({ trigger, getTournaments, getActiveSlug, o
         close();
         onSelect?.(slug);
     }
+
+    // Pull every currently-visible tournament (slider range + search) into the
+    // opening explorer as one combined dataset.
+    function selectRange() {
+        const visible = items.filter((it) => !it.el.classList.contains('hidden'));
+        if (visible.length === 0) return;
+        close();
+        onSelectRange?.({
+            slugs: visible.map((it) => it.tournament.slug),
+            tournaments: visible.map((it) => it.tournament),
+            lo: parseInt(rangeLoEl.value),
+            hi: parseInt(rangeHiEl.value),
+        });
+    }
+    rangeExploreEl.addEventListener('click', selectRange);
 
     trigger.addEventListener('click', (e) => {
         e.preventDefault();

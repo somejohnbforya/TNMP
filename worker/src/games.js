@@ -133,7 +133,9 @@ export async function handleQuery(request, env) {
     const roundParam = url.searchParams.get('round');
     const boardParam = url.searchParams.get('board');
     const includeSet = new Set((url.searchParams.get('include') || '').split(',').filter(Boolean));
-    const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 500);
+    // bulk=1 lifts the page cap for range/archive fetches (many tournaments at once).
+    const bulk = url.searchParams.get('bulk') === '1';
+    const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), bulk ? 8000 : 500);
     const offset = parseInt(url.searchParams.get('offset') || '0');
 
     const conditions = [];
@@ -144,9 +146,17 @@ export async function handleQuery(request, env) {
     if (gameId) {
         // No tournament scoping needed
     } else if (tournament && tournament !== 'all') {
-        conditions.push('g.tournament_slug = ?');
-        params.push(tournament);
-        tournamentSlug = tournament;
+        const slugs = tournament.split(',').map((x) => x.trim()).filter(Boolean);
+        if (slugs.length > 1) {
+            // Multi-tournament (slider-range / archive) query. No single-slug
+            // scoping, so the byes lookup stays off (it's per-tournament).
+            conditions.push(`g.tournament_slug IN (${slugs.map(() => '?').join(',')})`);
+            params.push(...slugs);
+        } else {
+            conditions.push('g.tournament_slug = ?');
+            params.push(slugs[0]);
+            tournamentSlug = slugs[0];
+        }
     } else if (!tournament) {
         const resolved = await resolveCurrentSlug(env, request);
         if (resolved instanceof Response) return resolved;

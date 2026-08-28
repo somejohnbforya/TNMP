@@ -151,6 +151,51 @@ export async function fetchPlayerGames(name, norm) {
     );
 }
 
+/**
+ * Fetch every game across a set of tournaments (the slider range) and ingest
+ * them as one explorer dataset. Chunks the slug list so no single bulk request
+ * exceeds ~8000 games; the common (recent-years) case is a single request.
+ */
+export async function switchToRange({ slugs, lo, hi, tournaments }) {
+    const gen = ++_fetchGeneration;
+
+    const CHUNK = 8000;
+    const list =
+        tournaments && tournaments.length === slugs.length
+            ? tournaments
+            : slugs.map((slug) => ({ slug, gameCount: 300 }));
+    const chunks = [];
+    let cur = [],
+        count = 0;
+    for (const t of list) {
+        const gc = t.gameCount || 300; // estimate when USCF count is missing
+        if (cur.length && count + gc > CHUNK) {
+            chunks.push(cur);
+            cur = [];
+            count = 0;
+        }
+        cur.push(t.slug);
+        count += gc;
+    }
+    if (cur.length) chunks.push(cur);
+
+    const parts = await Promise.all(
+        chunks.map((chunk) => queryGames({ tournament: chunk.join(','), include: 'pgn', bulk: 1, limit: 8000 })),
+    );
+    if (gen !== _fetchGeneration) return;
+
+    const games = parts.flatMap((p) => p.games);
+    const label = lo === hi ? `TNM ${lo}` : `TNM ${lo}\u2013${hi}`;
+    _activeTournamentSlug = `range:${lo}-${hi}`;
+    // events: [] keeps this a plain dataset (multi-tournament would otherwise
+    // trip the "Imported Games" event machinery and rename the title).
+    ingestDataset(
+        `tournament:range:${lo}-${hi}`,
+        { games, events: [], meta: { name: label } },
+        { defaultRound: false, skipIdbWrite: true },
+    );
+}
+
 /** Switch to a different tournament (server fetch path). */
 export async function switchTournament(value, currentSlug) {
     const isCurrentTournament = value === currentSlug;

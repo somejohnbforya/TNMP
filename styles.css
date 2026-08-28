@@ -1803,6 +1803,27 @@ input.tm-search:focus { box-shadow: var(--shadow-xs), 0 0 0 1px var(--accent); }
 .tm-stat-rounds  { color: light-dark(#466d33, #a9cd88); }
 .tm-stat-games   { color: light-dark(#9a6f1d, #e0bb72); }
 
+.tm-range-explore {
+    display: block;
+    width: 100%;
+    margin: 0.5rem 0 0.1rem;
+    padding: 0.55rem 0.75rem;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--surface-subtle);
+    border: 1px solid rgb(from var(--accent) r g b / 0.4);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.tm-range-explore:hover {
+    background: rgb(from var(--accent) r g b / 0.14);
+    border-color: var(--accent);
+}
+.tm-range-explore.hidden { display: none; }
+
 .tm-count {
     text-align: center;
     color: var(--text-faint);
@@ -5213,15 +5234,76 @@ input.browser-search-input {
 }
 
 .browser-section-header {
-    font-size: 0.7rem;
-    font-weight: 700;
-    color: var(--text-subtle);
-    padding: 0.6rem 0.5rem 0.25rem;
-    margin-top: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    box-sizing: border-box;
+    padding: 0 0.5rem;
+    cursor: pointer;
+    user-select: none;
+    overflow: hidden;
+    white-space: nowrap;
+    border-radius: var(--radius-sm);
 }
 
-.browser-section-header:first-child {
-    margin-top: 0;
+@media (hover: hover) {
+    .browser-section-header:hover {
+        background: var(--overlay-light);
+    }
+}
+
+.browser-collapse-chevron {
+    flex: none;
+    width: 0.8em;
+    font-size: 0.6rem;
+    line-height: 1;
+    color: var(--text-faint);
+}
+
+.browser-header-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.browser-header-count {
+    margin-left: auto;
+    padding-left: 0.5rem;
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Indent grows with nesting depth (position); text style keys off group (type). */
+.browser-header-l1 {
+    padding-left: 1.3rem;
+}
+.browser-header-l2 {
+    padding-left: 2.1rem;
+}
+
+.browser-group-event .browser-header-label {
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-primary);
+}
+.browser-group-round .browser-header-label {
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.75rem;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-secondary);
+}
+.browser-group-section .browser-header-label {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
 }
 
 .browser-empty {

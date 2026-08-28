@@ -24,6 +24,7 @@ import { Chessground } from '@lichess-org/chessground';
 import { createGame } from './game.js';
 import {
     switchTournament,
+    switchToRange,
     fetchPlayerGames,
     getTournamentList,
     getActiveTournamentSlug,
@@ -1152,7 +1153,8 @@ games.onChange(() => {
         color: games.getFilter('color'),
         event: games.getFilter('event'),
         visibleSections: games.getVisibleSections(),
-        groupedGames: games.getGroupedGames(),
+        browserItems: games.getBrowserItems(),
+        visibleCount: games.getVisibleGameCount(),
         explorerFen: games.getExplorerFen(),
         explorerMoveHistory: games.getExplorerMoves(),
     };
@@ -3013,7 +3015,7 @@ function renderBrowserSaveButton(state) {
     const btn = _activeTab.browserSave;
     const count = _activeTab.browserSaveCount;
     if (!btn) return;
-    const n = state.groupedGames.reduce((total, g) => total + g.games.length, 0);
+    const n = state.visibleCount;
     btn.disabled = n === 0;
     btn.setAttribute(
         'data-tooltip',
@@ -3047,7 +3049,7 @@ function renderBrowserTitle(panelEl, state) {
     // Multiple events: dropdown with "All Events (N games)" default
     const localEvents = games.getEvents();
     if (localEvents) {
-        const allLabel = `All Events (${state.groupedGames.reduce((n, g) => n + g.games.length, 0)} games)`;
+        const allLabel = `All Events (${state.visibleCount} games)`;
         const options = localEvents
             .map((e) => `<option value="${e}"${state.event === e ? ' selected' : ''}>${e}</option>`)
             .join('');
@@ -3086,6 +3088,12 @@ function renderBrowserTitle(panelEl, state) {
         onSelect: (nextSlug) => {
             const currentSlug = getActiveTournamentSlug();
             games.switchDataSource(nextSlug, currentSlug, { onSwitch: switchTournament });
+        },
+        onSelectRange: (spec) => {
+            const currentSlug = getActiveTournamentSlug();
+            games.switchDataSource(`range:${spec.lo}-${spec.hi}`, currentSlug, {
+                onSwitch: () => switchToRange(spec),
+            });
         },
     });
 }
@@ -3199,7 +3207,7 @@ const poolGameHtml =
             </div>
         </div>`;
 
-const POOL_HEADER_HTML = `<div class="browser-section-header"></div>`;
+const POOL_HEADER_HTML = `<div class="browser-section-header"><span class="browser-collapse-chevron" aria-hidden="true"></span><span class="browser-header-label"></span><span class="browser-header-count"></span></div>`;
 const POOL_PROFILE_HTML = `<button type="button" class="browser-profile-link" data-profile-player=""></button>`;
 
 let _gameTemplate = null;
@@ -3258,7 +3266,14 @@ function createHeaderPoolElement() {
     el.style.position = 'absolute';
     el.style.left = '0';
     el.style.right = '0';
-    return { el, type: 'header', idx: -1 };
+    return {
+        el,
+        type: 'header',
+        idx: -1,
+        chevron: el.querySelector('.browser-collapse-chevron'),
+        label: el.querySelector('.browser-header-label'),
+        count: el.querySelector('.browser-header-count'),
+    };
 }
 
 function createProfilePoolElement() {
@@ -3290,7 +3305,19 @@ function populatePoolElement(pe, item, activeGameId) {
         pe.whiteHalf.className = 'browser-result-half ' + resultClass(game.result, 'white', 'browser');
         pe.blackHalf.className = 'browser-result-half ' + resultClass(game.result, 'black', 'browser');
     } else if (item.type === 'header') {
-        pe.el.textContent = item.data;
+        pe.el.className =
+            'browser-section-header browser-header-l' +
+            (item.level || 0) +
+            ' browser-group-' +
+            (item.group || 'section') +
+            (item.collapsed ? ' collapsed' : '');
+        pe.el.dataset.collapseKey = item.key || '';
+        // Virtualized rows are uniform-height (positioned by index * rowH), so
+        // every header must match the measured game-row height exactly.
+        if (_activeTab?.vlist?.rowH) pe.el.style.height = _activeTab.vlist.rowH + 'px';
+        if (pe.chevron) pe.chevron.textContent = item.collapsed ? '\u25B8' : '\u25BE';
+        if (pe.label) pe.label.textContent = item.label;
+        if (pe.count) pe.count.textContent = item.count != null ? String(item.count) : '';
     } else if (item.type === 'profile') {
         pe.el.textContent = `View all-time profile`;
         pe.el.dataset.profilePlayer = item.data;
@@ -3302,7 +3329,7 @@ function renderBrowserGameList(panelEl, state) {
     const vl = _activeTab.vlist;
     vl.scrollEl = gamesEl;
 
-    const hasGames = state.groupedGames.some((g) => g.games.length > 0);
+    const hasGames = state.visibleCount > 0;
     if (!hasGames) {
         vl.items = null;
         if (vl.assigned) {
@@ -3320,13 +3347,7 @@ function renderBrowserGameList(panelEl, state) {
     if (_features.playerProfiles && playerMode && !state.tournament) {
         items.push({ type: 'profile', data: games.getPlayer() });
     }
-    for (const { header, games: groupItems } of state.groupedGames) {
-        if (header) items.push({ type: 'header', data: header });
-        for (const game of groupItems) {
-            const labelRound = playerMode || state.round == null;
-            items.push({ type: 'game', data: game, label: labelRound ? `${game.round}.${game.board || '?'}` : null });
-        }
-    }
+    items.push(...state.browserItems);
     vl.items = items;
 
     // Measure row height from the first game row in the current data
@@ -3666,6 +3687,12 @@ function wireBrowserListeners(panelEl) {
                     const uscfId = getPlayerUscfId(name);
                     if (uscfId) window.open(`https://ratings.uschess.org/player/${uscfId}`, '_blank', 'noopener');
                 }
+                return;
+            }
+
+            const collapseHdr = e.target.closest('.browser-section-header[data-collapse-key]');
+            if (collapseHdr && collapseHdr.dataset.collapseKey) {
+                games.toggleGroupCollapse(collapseHdr.dataset.collapseKey);
                 return;
             }
 

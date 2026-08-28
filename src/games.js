@@ -100,6 +100,7 @@ function makeCtx(key, datasetKey, ds) {
         filters: { ...EMPTY_FILTERS },
         visibleSections: new Set(ds.sections),
         explorer: { chess: new Chess(), moveHistory: [] },
+        collapsedGroups: new Set(), // header keys the user has collapsed (session-only)
     };
 }
 
@@ -537,8 +538,22 @@ export function _resetCrossTabSyncForTests() {
 
 // ─── Derived Queries ─────────────────────────────────────────────
 
-export function getGroupedGames() {
-    return groupGames(getVisibleGames());
+export function getBrowserItems() {
+    return buildBrowserItems(getVisibleGames());
+}
+
+/** Count of games passing the active filters (independent of collapse state). */
+export function getVisibleGameCount() {
+    return getVisibleGames().length;
+}
+
+/** Toggle a header group's collapsed state (session-only, per context). */
+export function toggleGroupCollapse(key) {
+    if (!_activeCtx) return;
+    const set = _activeCtx.collapsedGroups || (_activeCtx.collapsedGroups = new Set());
+    if (set.has(key)) set.delete(key);
+    else set.add(key);
+    notifyChange();
 }
 
 /** Flat list of visible game ids. Skips rows without a gameId (e.g. byes). */
@@ -777,63 +792,169 @@ export function getVisibleGames() {
         games = games.filter((g) => g.gameId && explorerGameIds.has(g.gameId));
     }
 
-    if (ds.sections.length > 0) {
-        const sectionOrder = new Map(ds.sections.map((s, i) => [s, i]));
-        games = [...games].sort((a, b) => {
-            const sa = sectionOrder.get(a.section) ?? 999;
-            const sb = sectionOrder.get(b.section) ?? 999;
-            if (sa !== sb) return sa - sb;
-            if ((a.round || 0) !== (b.round || 0)) return (a.round || 0) - (b.round || 0);
-            return (a.board || 999) - (b.board || 999);
-        });
-    }
+    // Player datasets keep their own tournament grouping/sort (see getBrowserItems);
+    // every other dataset sorts into the browse hierarchy.
+    if (!ds.playerName) games = sortHierarchical(games);
 
     return games;
 }
 
-function groupGames(games) {
-    let keyFn, headerFn;
-    const ds = _activeDs();
-    const sections = ds?.sections ?? [];
+// Rating-band rank for a section name; higher = stronger section, shown first.
+// Reproduces the canonical order for standard names and degrades gracefully.
+function sectionRank(section) {
+    if (!section) return -1;
+    const s = String(section).trim();
+    if (/^extra/i.test(s)) return -100; // Extra Rated always last
+    if (/^open/i.test(s)) return 200000; // Open on top
+    const plus = s.match(/^(\d{3,4})\s*\+/); // "2000+"
+    if (plus) return 100000 + parseInt(plus[1]); // open-top bands above ranges, by floor
+    const range = s.match(/(\d{3,4})\s*[-\u2013]\s*(\d{3,4})/); // "1600-1999"
+    if (range) return parseInt(range[2]); // by upper bound
+    const under = s.match(/^u\s*(\d{3,4})/i); // "U1600"
+    if (under) return parseInt(under[1]) - 1;
+    const n = s.match(/(\d{3,4})/);
+    return n ? parseInt(n[1]) : -1;
+}
 
-    if (ds?.playerName) {
-        keyFn = (g) => g.tournamentSlug;
-        headerFn = (g) => g.tournament;
-    } else if (sections.length > 0) {
-        keyFn = (g) => g.section;
-        headerFn = keyFn;
-    } else {
-        const multiEvent = ds?.events != null;
-        keyFn = (g) => {
-            const r = g.round;
-            if (!r && !multiEvent) return null;
-            return multiEvent ? `${g.tournament || 'Unknown'} — Round ${r || '?'}` : `Round ${r}`;
-        };
-        headerFn = keyFn;
+const _normDate = (d) => (d || '').replace(/\./g, '-');
+
+// Browse order: Event (newest first) > Round (asc) > Section (rating desc) > Board (asc).
+function sortHierarchical(games) {
+    const evDate = new Map(); // tournamentSlug -> earliest game date (its start)
+    for (const g of games) {
+        const d = _normDate(g.date);
+        const cur = evDate.get(g.tournamentSlug);
+        if (cur === undefined || (d && d < cur)) evDate.set(g.tournamentSlug, d || cur || '');
     }
+    return [...games].sort((a, b) => {
+        const ea = evDate.get(a.tournamentSlug) || '';
+        const eb = evDate.get(b.tournamentSlug) || '';
+        if (ea !== eb) return eb.localeCompare(ea); // newest event first
+        if (a.tournamentSlug !== b.tournamentSlug) return a.tournamentSlug < b.tournamentSlug ? -1 : 1;
+        if ((a.round || 0) !== (b.round || 0)) return (a.round || 0) - (b.round || 0);
+        const sr = sectionRank(b.section) - sectionRank(a.section);
+        if (sr !== 0) return sr;
+        return (a.board || 999) - (b.board || 999);
+    });
+}
 
+// Player-mode browse: group by tournament (newest first), games within by round desc.
+function playerBrowserItems(games, collapsed) {
     const map = new Map();
     const groups = [];
     for (const g of games) {
-        const key = keyFn(g);
-        if (!map.has(key)) {
-            map.set(key, []);
-            groups.push({ header: headerFn(g), games: map.get(key) });
+        if (!map.has(g.tournamentSlug)) {
+            map.set(g.tournamentSlug, { slug: g.tournamentSlug, header: g.tournament, games: [] });
+            groups.push(map.get(g.tournamentSlug));
         }
-        map.get(key).push(g);
+        map.get(g.tournamentSlug).games.push(g);
+    }
+    const maxDate = (grp) => grp.games.reduce((m, x) => (_normDate(x.date) > m ? _normDate(x.date) : m), '');
+    groups.sort((a, b) => maxDate(b).localeCompare(maxDate(a)));
+    const items = [];
+    for (const grp of groups) {
+        grp.games.sort((a, b) => (b.round || 0) - (a.round || 0));
+        const key = `E:${grp.slug}`;
+        const isCol = collapsed.has(key);
+        items.push({ type: 'header', level: 0, label: grp.header, key, collapsed: isCol, count: grp.games.length });
+        if (isCol) continue;
+        for (const g of grp.games) items.push({ type: 'game', data: g, label: `${g.round}.${g.board || '?'}` });
+    }
+    return items;
+}
+
+// Build the flat, virtualized-list item stream: interleaved header/game items.
+// Header levels collapse to nothing when there is only one value at that level.
+function buildBrowserItems(games) {
+    const ds = _activeDs();
+    if (!ds) return [];
+    const collapsed = _activeCtx?.collapsedGroups ?? new Set();
+
+    if (ds.playerName) return playerBrowserItems(games, collapsed);
+
+    const showEvent = new Set(games.map((g) => g.tournamentSlug)).size > 1;
+    const showRound = new Set(games.map((g) => g.round)).size > 1;
+    const showSection = new Set(games.map((g) => g.section).filter(Boolean)).size > 1;
+
+    // Shared key builders so header keys and per-group counts never drift apart.
+    const eKey = (g) => `E:${g.tournamentSlug}`;
+    const rKey = (g) => (showEvent ? eKey(g) + '|' : '') + `R:${g.round}`;
+    const sKey = (g) => (showRound ? rKey(g) : showEvent ? eKey(g) : '') + `|S:${g.section}`;
+
+    const counts = new Map();
+    const bump = (k) => counts.set(k, (counts.get(k) || 0) + 1);
+    for (const g of games) {
+        if (showEvent) bump(eKey(g));
+        if (showRound) bump(rKey(g));
+        if (showSection) bump(sKey(g));
     }
 
-    if (ds?.playerName) {
-        // Sort key only — records keep their source date format. Legacy rows
-        // may carry PGN dot-dates (2026.05.19), which would otherwise
-        // lex-sort above ISO datetimes ('.' > '-' in ASCII).
-        const sortDate = (x) => (x.date || '').replace(/\./g, '-');
-        const maxDate = (g) => g.games.reduce((max, x) => (sortDate(x) > max ? sortDate(x) : max), '');
-        groups.sort((a, b) => maxDate(b).localeCompare(maxDate(a)));
-        for (const g of groups) g.games.sort((a, b) => (b.round || 0) - (a.round || 0));
-    }
+    // Indent depth grows with each active ancestor level; text style keys off the
+    // semantic group instead, so a Section always looks like a Section.
+    const roundLevel = showEvent ? 1 : 0;
+    const sectionLevel = roundLevel + (showRound ? 1 : 0);
+    // Only the outermost visible level carries game counts (the top-level
+    // breakdown), so a count is never ambiguous about which level it totals.
+    const topGroup = showEvent ? 'event' : showRound ? 'round' : 'section';
 
-    return groups;
+    const items = [];
+    let curE, curR, curS;
+    let skipE = false;
+    let skipR = false;
+    let skipS = false;
+    for (const g of games) {
+        if (showEvent && g.tournamentSlug !== curE) {
+            curE = g.tournamentSlug;
+            curR = undefined;
+            curS = undefined;
+            const key = eKey(g);
+            skipE = collapsed.has(key);
+            items.push({
+                type: 'header',
+                group: 'event',
+                level: 0,
+                label: g.tournament || 'Unknown',
+                key,
+                collapsed: skipE,
+                count: topGroup === 'event' ? counts.get(key) : undefined,
+            });
+        }
+        if (skipE) continue;
+        if (showRound && g.round !== curR) {
+            curR = g.round;
+            curS = undefined;
+            const key = rKey(g);
+            skipR = collapsed.has(key);
+            items.push({
+                type: 'header',
+                group: 'round',
+                level: roundLevel,
+                label: `Round ${g.round ?? '?'}`,
+                key,
+                collapsed: skipR,
+                count: topGroup === 'round' ? counts.get(key) : undefined,
+            });
+        }
+        if (skipR) continue;
+        if (showSection && g.section !== curS) {
+            curS = g.section;
+            const key = sKey(g);
+            skipS = collapsed.has(key);
+            items.push({
+                type: 'header',
+                group: 'section',
+                level: sectionLevel,
+                label: g.section || 'Unsectioned',
+                key,
+                collapsed: skipS,
+                count: topGroup === 'section' ? counts.get(key) : undefined,
+            });
+        }
+        if (skipS) continue;
+        const label = showRound ? String(g.board ?? '?') : `${g.round}.${g.board || '?'}`;
+        items.push({ type: 'game', data: g, label });
+    }
+    return items;
 }
 
 // ─── Explorer query helpers ────────────────────────────────────────
