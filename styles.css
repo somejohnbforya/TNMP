@@ -5365,6 +5365,8 @@ input.browser-search-input {
 }
 
 .browser-header-label {
+    flex: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -5406,6 +5408,39 @@ input.browser-search-input {
     font-weight: 700;
     font-size: 0.68rem;
     letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+}
+
+/* Coalesced breadcrumb header: Event > Round > Section on one row. Each segment
+   keeps its level's weight/font so the hierarchy still reads inline. */
+.browser-header-crumb .browser-header-label {
+    font-size: 0.76rem;
+    font-family: inherit;
+    text-transform: none;
+    letter-spacing: 0;
+}
+.browser-crumb-seg {
+    white-space: nowrap;
+}
+.browser-crumb-sep {
+    margin: 0 0.3rem;
+    color: var(--text-faint);
+    font-weight: 400;
+}
+.browser-crumb-seg.browser-group-event {
+    font-weight: 700;
+    color: var(--text-primary);
+}
+.browser-crumb-seg.browser-group-round {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+.browser-crumb-seg.browser-group-section {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.9em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--text-subtle);
 }

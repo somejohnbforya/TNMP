@@ -947,7 +947,9 @@ function allHeaderKeys(games) {
 }
 
 // Build the flat, virtualized-list item stream: interleaved header/game items.
-// Header levels collapse to nothing when there is only one value at that level.
+// Single-child header chains are coalesced into one breadcrumb row (like a file
+// tree's "compact folders"), so degenerate Event > Round > Section paths don't
+// eat the list when the explorer scatters a few games across many tournaments.
 function buildBrowserItems(games) {
     const ds = _activeDs();
     if (!ds) return [];
@@ -957,79 +959,62 @@ function buildBrowserItems(games) {
 
     const { showEvent, showRound, showSection, eKey, rKey, sKey } = groupStructure(games);
 
-    const counts = new Map();
-    const bump = (k) => counts.set(k, (counts.get(k) || 0) + 1);
-    for (const g of games) {
-        if (showEvent) bump(eKey(g));
-        if (showRound) bump(rKey(g));
-        if (showSection) bump(sKey(g));
-    }
+    // Levels actually shown, outermost first.
+    const levels = [];
+    if (showEvent) levels.push({ group: 'event', key: eKey, label: (g) => g.tournament || 'Unknown' });
+    if (showRound) levels.push({ group: 'round', key: rKey, label: (g) => `Round ${g.round ?? '?'}` });
+    if (showSection) levels.push({ group: 'section', key: sKey, label: (g) => g.section || 'Unsectioned' });
 
-    // Indent depth grows with each active ancestor level; text style keys off the
-    // semantic group instead, so a Section always looks like a Section.
-    const roundLevel = showEvent ? 1 : 0;
-    const sectionLevel = roundLevel + (showRound ? 1 : 0);
-    // Only the outermost visible level carries game counts (the top-level
-    // breakdown), so a count is never ambiguous about which level it totals.
-    const topGroup = showEvent ? 'event' : showRound ? 'round' : 'section';
+    const gameLabel = (g) => (showRound ? String(g.board ?? '?') : `${g.round}.${g.board || '?'}`);
 
     const items = [];
-    let curE, curR, curS;
-    let skipE = false;
-    let skipR = false;
-    let skipS = false;
-    for (const g of games) {
-        if (showEvent && g.tournamentSlug !== curE) {
-            curE = g.tournamentSlug;
-            curR = undefined;
-            curS = undefined;
-            const key = eKey(g);
-            skipE = collapsed.has(key);
-            items.push({
-                type: 'header',
-                group: 'event',
-                level: 0,
-                label: g.tournament || 'Unknown',
-                key,
-                collapsed: skipE,
-                count: topGroup === 'event' ? counts.get(key) : undefined,
-            });
-        }
-        if (skipE) continue;
-        if (showRound && g.round !== curR) {
-            curR = g.round;
-            curS = undefined;
-            const key = rKey(g);
-            skipR = collapsed.has(key);
-            items.push({
-                type: 'header',
-                group: 'round',
-                level: roundLevel,
-                label: `Round ${g.round ?? '?'}`,
-                key,
-                collapsed: skipR,
-                count: topGroup === 'round' ? counts.get(key) : undefined,
-            });
-        }
-        if (skipR) continue;
-        if (showSection && g.section !== curS) {
-            curS = g.section;
-            const key = sKey(g);
-            skipS = collapsed.has(key);
-            items.push({
-                type: 'header',
-                group: 'section',
-                level: sectionLevel,
-                label: g.section || 'Unsectioned',
-                key,
-                collapsed: skipS,
-                count: topGroup === 'section' ? counts.get(key) : undefined,
-            });
-        }
-        if (skipS) continue;
-        const label = showRound ? String(g.board ?? '?') : `${g.round}.${g.board || '?'}`;
-        items.push({ type: 'game', data: g, label });
+    if (levels.length === 0) {
+        for (const g of games) items.push({ type: 'game', data: g, label: gameLabel(g) });
+        return items;
     }
+
+    // Nest games under their level path.
+    const root = { children: new Map(), games: [], count: 0 };
+    for (const g of games) {
+        let node = root;
+        for (const lvl of levels) {
+            const k = lvl.key(g);
+            let child = node.children.get(k);
+            if (!child) {
+                child = { key: k, group: lvl.group, label: lvl.label(g), children: new Map(), games: [], count: 0 };
+                node.children.set(k, child);
+            }
+            child.count++;
+            node = child;
+        }
+        node.games.push(g);
+    }
+
+    // Flatten depth-first, coalescing single-child header chains into a breadcrumb.
+    const walk = (node, depth) => {
+        const chain = [node];
+        let cur = node;
+        while (cur.children.size === 1 && cur.games.length === 0) {
+            cur = cur.children.values().next().value;
+            chain.push(cur);
+        }
+        const isCol = collapsed.has(cur.key);
+        items.push({
+            type: 'header',
+            crumb: chain.map((n) => ({ label: n.label, group: n.group })),
+            level: depth,
+            key: cur.key,
+            collapsed: isCol,
+            count: depth === 0 ? chain[0].count : undefined,
+        });
+        if (isCol) return;
+        if (cur.games.length > 0) {
+            for (const game of cur.games) items.push({ type: 'game', data: game, label: gameLabel(game) });
+        } else {
+            for (const child of cur.children.values()) walk(child, depth + 1);
+        }
+    };
+    for (const top of root.children.values()) walk(top, 0);
     return items;
 }
 

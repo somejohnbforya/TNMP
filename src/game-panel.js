@@ -3340,18 +3340,39 @@ function populatePoolElement(pe, item, activeGameId) {
         pe.whiteHalf.className = 'browser-result-half ' + resultClass(game.result, 'white', 'browser');
         pe.blackHalf.className = 'browser-result-half ' + resultClass(game.result, 'black', 'browser');
     } else if (item.type === 'header') {
-        pe.el.className =
-            'browser-section-header browser-header-l' +
-            (item.level || 0) +
-            ' browser-group-' +
-            (item.group || 'section') +
-            (item.collapsed ? ' collapsed' : '');
+        const base =
+            'browser-section-header browser-header-l' + (item.level || 0) + (item.collapsed ? ' collapsed' : '');
+        if (item.crumb) {
+            pe.el.className = base + ' browser-header-crumb';
+            const renderCrumb = (abbrev) =>
+                item.crumb
+                    .map((seg, i) => {
+                        const text =
+                            abbrev && seg.group === 'event'
+                                ? seg.label.replace(/Tuesday Night Marathon/i, 'TNM')
+                                : seg.label;
+                        return (
+                            (i ? '<span class="browser-crumb-sep">\u203A</span>' : '') +
+                            `<span class="browser-crumb-seg browser-group-${seg.group}">${escapeHtml(text)}</span>`
+                        );
+                    })
+                    .join('');
+            pe.label.innerHTML = renderCrumb(false);
+            // Shorten "Tuesday Night Marathon" -> "TNM" only when the full
+            // breadcrumb overflows, so the section stays visible instead of
+            // being truncated.
+            if (pe.label.scrollWidth > pe.label.clientWidth + 1) {
+                pe.label.innerHTML = renderCrumb(true);
+            }
+        } else {
+            pe.el.className = base + ' browser-group-' + (item.group || 'section');
+            pe.label.textContent = item.label;
+        }
         pe.el.dataset.collapseKey = item.key || '';
         // Virtualized rows are uniform-height (positioned by index * rowH), so
         // every header must match the measured game-row height exactly.
         if (_activeTab?.vlist?.rowH) pe.el.style.height = _activeTab.vlist.rowH + 'px';
         if (pe.chevron) pe.chevron.textContent = item.collapsed ? '\u25B8' : '\u25BE';
-        if (pe.label) pe.label.textContent = item.label;
         if (pe.count) pe.count.textContent = item.count != null ? String(item.count) : '';
     } else if (item.type === 'profile') {
         pe.el.textContent = `View all-time profile`;
