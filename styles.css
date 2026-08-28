@@ -4991,6 +4991,22 @@ input.browser-search-input {
 .browser-filter-trigger:hover {
     color: var(--text-primary);
 }
+
+.browser-collapse-all {
+    font-family: inherit;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-faint);
+    background: none;
+    border: none;
+    padding: 0.25rem 0.5rem;
+    margin-left: 0.15rem;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+}
+.browser-collapse-all:hover {
+    color: var(--text-primary);
+}
 .browser-filter-trigger .ms-caret {
     font-size: 0.6rem;
     color: var(--text-faint);

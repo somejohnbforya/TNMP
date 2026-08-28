@@ -3199,6 +3199,9 @@ function renderBrowserFilters(panelEl, state) {
     let html = '';
     if (showRounds) html += trigger('round', _roundFilter.summaryText());
     if (showSections) html += trigger('section', _sectionFilter.summaryText());
+    html +=
+        `<button type="button" class="browser-collapse-all" data-collapse-all>` +
+        `${games.hasCollapsedGroups() ? 'Expand all' : 'Collapse all'}</button>`;
     container.innerHTML = html;
 
     // Keep an open popover's checkmarks in sync after the bar re-renders.
@@ -3701,6 +3704,12 @@ function wireBrowserListeners(panelEl) {
                         _activeTab.board.setOrientation(toggling === 'black' ? 'black' : 'white');
                     }
                 }
+                return;
+            }
+
+            if (e.target.closest('[data-collapse-all]')) {
+                if (games.hasCollapsedGroups()) games.expandAllGroups();
+                else games.collapseAllGroups();
                 return;
             }
 

@@ -568,8 +568,34 @@ export function getVisibleGameCount() {
 export function toggleGroupCollapse(key) {
     if (!_activeCtx) return;
     const set = _activeCtx.collapsedGroups || (_activeCtx.collapsedGroups = new Set());
-    if (set.has(key)) set.delete(key);
-    else set.add(key);
+    if (set.has(key)) {
+        // Expand this node only; its descendants keep whatever state they hold.
+        set.delete(key);
+    } else {
+        // Collapse recursively: also collapse every descendant, so re-opening this
+        // node shows a tidy one-level view instead of springing fully open.
+        set.add(key);
+        const prefix = key + '|';
+        for (const k of allHeaderKeys(getVisibleGames())) {
+            if (k.startsWith(prefix)) set.add(k);
+        }
+    }
+    notifyChange();
+}
+
+export function hasCollapsedGroups() {
+    return (_activeCtx?.collapsedGroups?.size ?? 0) > 0;
+}
+
+export function collapseAllGroups() {
+    if (!_activeCtx) return;
+    _activeCtx.collapsedGroups = allHeaderKeys(getVisibleGames());
+    notifyChange();
+}
+
+export function expandAllGroups() {
+    if (!_activeCtx?.collapsedGroups?.size) return;
+    _activeCtx.collapsedGroups.clear();
     notifyChange();
 }
 
@@ -871,6 +897,30 @@ function playerBrowserItems(games, collapsed) {
     return items;
 }
 
+// Which header levels are shown for these games, plus the key builders. Shared
+// by rendering, per-group counts, and collapse logic so they never disagree.
+function groupStructure(games) {
+    const showEvent = new Set(games.map((g) => g.tournamentSlug)).size > 1;
+    const showRound = new Set(games.map((g) => g.round)).size > 1;
+    const showSection = new Set(games.map((g) => g.section).filter(Boolean)).size > 1;
+    const eKey = (g) => `E:${g.tournamentSlug}`;
+    const rKey = (g) => (showEvent ? eKey(g) + '|' : '') + `R:${g.round}`;
+    const sKey = (g) => (showRound ? rKey(g) : showEvent ? eKey(g) : '') + `|S:${g.section}`;
+    return { showEvent, showRound, showSection, eKey, rKey, sKey };
+}
+
+// Every header key present for the given games (all active levels).
+function allHeaderKeys(games) {
+    const { showEvent, showRound, showSection, eKey, rKey, sKey } = groupStructure(games);
+    const keys = new Set();
+    for (const g of games) {
+        if (showEvent) keys.add(eKey(g));
+        if (showRound) keys.add(rKey(g));
+        if (showSection) keys.add(sKey(g));
+    }
+    return keys;
+}
+
 // Build the flat, virtualized-list item stream: interleaved header/game items.
 // Header levels collapse to nothing when there is only one value at that level.
 function buildBrowserItems(games) {
@@ -880,14 +930,7 @@ function buildBrowserItems(games) {
 
     if (ds.playerName) return playerBrowserItems(games, collapsed);
 
-    const showEvent = new Set(games.map((g) => g.tournamentSlug)).size > 1;
-    const showRound = new Set(games.map((g) => g.round)).size > 1;
-    const showSection = new Set(games.map((g) => g.section).filter(Boolean)).size > 1;
-
-    // Shared key builders so header keys and per-group counts never drift apart.
-    const eKey = (g) => `E:${g.tournamentSlug}`;
-    const rKey = (g) => (showEvent ? eKey(g) + '|' : '') + `R:${g.round}`;
-    const sKey = (g) => (showRound ? rKey(g) : showEvent ? eKey(g) : '') + `|S:${g.section}`;
+    const { showEvent, showRound, showSection, eKey, rKey, sKey } = groupStructure(games);
 
     const counts = new Map();
     const bump = (k) => counts.set(k, (counts.get(k) || 0) + 1);
