@@ -64,6 +64,7 @@ import {
     getFilter,
     getLastTournamentKey,
     getVisibleGames,
+    getVisibleRounds,
     hydrateFromIdb,
     initCrossTabSync,
     ingestDataset,
@@ -718,7 +719,8 @@ function handleBrowserExport() {
         // collections have no single slug and fall back to a generic name.
         const slugs = new Set(games.map((g) => g.tournamentSlug).filter(Boolean));
         const prefix = slugs.size === 1 ? slugs.values().next().value : 'games';
-        const round = getFilter('round');
+        const rounds = getVisibleRounds();
+        const round = rounds.size === 1 ? [...rounds][0] : null;
         filename = round ? `${prefix}-R${round}.pgn` : `${prefix}.pgn`;
     }
     downloadPgn(games.map((g) => g.pgn).join('\n\n'), filename);

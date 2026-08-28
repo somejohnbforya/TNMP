@@ -29,7 +29,6 @@ import {
 // ─── Private State ─────────────────────────────────────────────────
 
 const EMPTY_FILTERS = {
-    round: null,
     tournament: null,
     color: null,
     opponent: null,
@@ -99,6 +98,7 @@ function makeCtx(key, datasetKey, ds) {
         datasetKey,
         filters: { ...EMPTY_FILTERS },
         visibleSections: new Set(ds.sections),
+        visibleRounds: new Set(ds.rounds),
         explorer: { chess: new Chess(), moveHistory: [] },
         collapsedGroups: new Set(), // header keys the user has collapsed (session-only)
     };
@@ -357,7 +357,7 @@ export function ingestDataset(key, fields, { defaultRound = false, filters = nul
     _datasetCache.set(key, ds);
     const ctx = makeCtx(key, key, ds);
     if (defaultRound && ds.rounds.length > 0) {
-        ctx.filters.round = ds.rounds[ds.rounds.length - 1];
+        ctx.visibleRounds = new Set([ds.rounds[ds.rounds.length - 1]]);
     }
     if (filters) {
         for (const [k, v] of Object.entries(filters)) {
@@ -414,6 +414,23 @@ export function getFilter(key) {
 }
 export function getVisibleSections() {
     return _activeCtx?.visibleSections ?? new Set();
+}
+
+export function getVisibleRounds() {
+    return _activeCtx?.visibleRounds ?? new Set();
+}
+
+export function setVisibleSections(set) {
+    if (!_activeCtx) return;
+    _activeCtx.visibleSections = new Set(set);
+    notifyChange();
+}
+
+export function setVisibleRounds(set) {
+    if (!_activeCtx) return;
+    // Multi-select values arrive as strings from the DOM; rounds are numbers.
+    _activeCtx.visibleRounds = new Set([...set].map((v) => (typeof v === 'string' ? parseInt(v, 10) : v)));
+    notifyChange();
 }
 export function getExplorerFen() {
     return _activeCtx?.explorer?.chess.fen() ?? 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
@@ -668,31 +685,14 @@ export function setFilter(key, value) {
     notifyChange();
 }
 
-export function toggleSection(section) {
-    if (!_activeCtx) return;
-    const ds = _activeDs();
-    if (!ds) return;
-    const ctx = _activeCtx;
-    const allVisible = ctx.visibleSections.size === ds.sections.length;
-    if (allVisible) {
-        ctx.visibleSections = new Set([section]);
-    } else if (ctx.visibleSections.has(section)) {
-        const next = new Set(ctx.visibleSections);
-        next.delete(section);
-        ctx.visibleSections = next.size > 0 ? next : new Set(ds.sections);
-    } else {
-        const next = new Set(ctx.visibleSections);
-        next.add(section);
-        ctx.visibleSections = next.size === ds.sections.length ? new Set(ds.sections) : next;
-    }
-    notifyChange();
-}
-
 export function clearFilter() {
     if (_activeCtx) {
         const ds = _activeDs();
         _activeCtx.filters = { ...EMPTY_FILTERS };
-        if (ds) _activeCtx.visibleSections = new Set(ds.sections);
+        if (ds) {
+            _activeCtx.visibleSections = new Set(ds.sections);
+            _activeCtx.visibleRounds = new Set(ds.rounds);
+        }
     }
     notifyChange();
 }
@@ -710,8 +710,9 @@ export function cloneCtx(sourceKey, { copyFilters = true } = {}) {
     if (copyFilters) {
         ctx.filters = { ...source.filters };
         ctx.visibleSections = new Set(source.visibleSections);
+        ctx.visibleRounds = new Set(source.visibleRounds);
     } else if (ds.rounds.length > 0) {
-        ctx.filters.round = ds.rounds[ds.rounds.length - 1];
+        ctx.visibleRounds = new Set([ds.rounds[ds.rounds.length - 1]]);
     }
     _ctxCache.set(newKey, ctx);
     _activeCtx = ctx;
@@ -753,9 +754,9 @@ export function setExplorerPosition(moves = []) {
 
 // ─── Filtering ───────────────────────────────────────────────────
 
-function passesFilters(g, filters, playerNorm, sections, visibleSections) {
-    const { round, tournament, color, opponentNorm, event, openingFamily } = filters;
-    if (round != null && g.round !== round) return false;
+function passesFilters(g, filters, playerNorm, sections, visibleSections, visibleRounds) {
+    const { tournament, color, opponentNorm, event, openingFamily } = filters;
+    if (visibleRounds && g.round != null && !visibleRounds.has(g.round)) return false;
     if (tournament && (g.tournamentSlug || g.tournament) !== tournament) return false;
     if (color && playerNorm) {
         if (color === 'white' ? g.whiteNorm !== playerNorm : g.blackNorm !== playerNorm) return false;
@@ -775,7 +776,14 @@ function passesFilters(g, filters, playerNorm, sections, visibleSections) {
 function passesActiveFilters(g) {
     const ds = _activeDs();
     if (!_activeCtx || !ds) return true;
-    return passesFilters(g, _activeCtx.filters, ds.playerNorm, ds.sections, _activeCtx.visibleSections);
+    return passesFilters(
+        g,
+        _activeCtx.filters,
+        ds.playerNorm,
+        ds.sections,
+        _activeCtx.visibleSections,
+        _activeCtx.visibleRounds,
+    );
 }
 
 export function getVisibleGames() {

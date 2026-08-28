@@ -13,7 +13,16 @@ import { openModal, closeModal, onModalClose } from './modal.js';
 import { openPlayerProfile } from './player-profile.js';
 import { nagToHtml, splitPgn } from './pgn-parser.js';
 import { FIELD_SCHEMA } from './record.js';
-import { formatName, resultClass, resultSymbol, scorePercent, openMenu, closeMenu, closeAllMenus } from './utils.js';
+import {
+    formatName,
+    resultClass,
+    resultSymbol,
+    scorePercent,
+    openMenu,
+    closeMenu,
+    closeAllMenus,
+    escapeHtml,
+} from './utils.js';
 import { CONFIG } from './config.js';
 import { refreshScheme } from './style.js';
 import { showToast } from './toast.js';
@@ -31,6 +40,7 @@ import {
     getPlayerUscfId,
 } from './tnm.js';
 import { createTournamentMenu, renderTournamentInfoHtml } from './tournament-menu.js';
+import { createMultiSelect } from './multi-select.js';
 import * as engine from './engine.js';
 import * as standings from './standings.js';
 
@@ -1148,7 +1158,7 @@ games.onChange(() => {
     if (_switchingTab || !_activeTab) return;
     _activeTab.ctxKey = games.getActiveCtxKey();
     _activeTab.gamesState = {
-        round: games.getFilter('round'),
+        visibleRounds: games.getVisibleRounds(),
         tournament: games.getFilter('tournament'),
         color: games.getFilter('color'),
         event: games.getFilter('event'),
@@ -3140,6 +3150,30 @@ function renderBrowserChips(panelEl, state) {
     `;
 }
 
+let _roundFilter = null;
+let _sectionFilter = null;
+
+function ensureFilterControls() {
+    if (!_roundFilter) {
+        _roundFilter = createMultiSelect({
+            noun: 'round',
+            allLabel: 'All rounds',
+            getItems: () => games.getRoundNumbers().map((r) => ({ value: r, label: `Round ${r}` })),
+            getSelected: () => games.getVisibleRounds(),
+            onChange: (set) => games.setVisibleRounds(set),
+        });
+    }
+    if (!_sectionFilter) {
+        _sectionFilter = createMultiSelect({
+            noun: 'section',
+            allLabel: 'All sections',
+            getItems: () => games.getSectionList().map((name) => ({ value: name, label: name })),
+            getSelected: () => games.getVisibleSections(),
+            onChange: (set) => games.setVisibleSections(set),
+        });
+    }
+}
+
 function renderBrowserFilters(panelEl, state) {
     const container = panelEl.querySelector('.browser-filters');
     const roundNumbers = games.getRoundNumbers();
@@ -3153,25 +3187,20 @@ function renderBrowserFilters(panelEl, state) {
         return;
     }
     container.classList.remove('hidden');
+    ensureFilterControls();
+
+    const trigger = (filter, label) =>
+        `<button type="button" class="browser-filter-trigger" data-filter="${filter}" aria-haspopup="listbox">` +
+        `<span class="browser-filter-label">${escapeHtml(label)}</span><span class="ms-caret">▾</span></button>`;
 
     let html = '';
-    if (showRounds) {
-        const wide = window.innerWidth > 600;
-        html += '<select class="browser-round-select">';
-        for (const r of roundNumbers) {
-            const selected = r === state.round ? ' selected' : '';
-            html += `<option value="${r}"${selected}>${wide ? `Round ${r}` : `R${r}`}</option>`;
-        }
-        html += `<option value=""${state.round == null ? ' selected' : ''}>${wide ? 'All rounds' : 'All'}</option>`;
-        html += '</select>';
-    }
-    if (showSections) {
-        for (const s of sectionList) {
-            const active = state.visibleSections.has(s) ? ' browser-section-active' : '';
-            html += `<button type="button" class="browser-section-btn${active}" data-section="${s}">${s}</button>`;
-        }
-    }
+    if (showRounds) html += trigger('round', _roundFilter.summaryText());
+    if (showSections) html += trigger('section', _sectionFilter.summaryText());
     container.innerHTML = html;
+
+    // Keep an open popover's checkmarks in sync after the bar re-renders.
+    _roundFilter.refresh();
+    _sectionFilter.refresh();
 }
 
 // ─── Virtual Game List ─────────────────────────────────────────────
@@ -3672,9 +3701,10 @@ function wireBrowserListeners(panelEl) {
                 return;
             }
 
-            const sectionBtn = e.target.closest('.browser-section-btn[data-section]');
-            if (sectionBtn) {
-                games.toggleSection(sectionBtn.dataset.section);
+            const filterTrigger = e.target.closest('.browser-filter-trigger[data-filter]');
+            if (filterTrigger) {
+                ensureFilterControls();
+                (filterTrigger.dataset.filter === 'round' ? _roundFilter : _sectionFilter).toggle(filterTrigger);
                 return;
             }
 
@@ -3726,9 +3756,6 @@ function wireBrowserListeners(panelEl) {
     panelEl.addEventListener(
         'change',
         (e) => {
-            if (e.target.classList.contains('browser-round-select')) {
-                games.setFilter('round', e.target.value ? parseInt(e.target.value, 10) : null);
-            }
             if (e.target.dataset?.chip === 'tournament-select') {
                 loadExplorer();
                 games.setFilter('tournament', e.target.value || null);
