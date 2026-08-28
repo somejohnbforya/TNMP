@@ -1575,7 +1575,7 @@ select.editor-header-input option {
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-md);
     padding: 0.75rem 0.75rem 0.5rem;
-    font-family: inherit;
+    font-family: var(--font-sans);
     color: var(--text-primary);
     animation: tm-popover-in 180ms ease-out both;
 }
@@ -1836,6 +1836,7 @@ input.tm-search:focus { box-shadow: var(--shadow-xs), 0 0 0 1px var(--accent); }
 .tm-info-popover {
     position: fixed;
     z-index: 10001;
+    font-family: var(--font-sans);
     animation: tm-popover-in 160ms ease-out both;
 }
 .tm-info-popover.hidden { display: none; }

@@ -21,7 +21,15 @@
 
 import { escapeHtml } from './utils.js';
 
-export function createMultiSelect({ getItems, getSelected, onChange, noun = 'item', allLabel }) {
+export function createMultiSelect({
+    getItems,
+    getSelected,
+    onChange,
+    noun = 'item',
+    allLabel,
+    single = false,
+    triggerSelector = null,
+}) {
     const ALL = allLabel || `All ${noun}s`;
     let container = document.body;
     const popover = document.createElement('div');
@@ -104,7 +112,9 @@ export function createMultiSelect({ getItems, getSelected, onChange, noun = 'ite
     }
 
     function onOutside(e) {
-        if (popover.contains(e.target) || (anchor && anchor.contains(e.target))) return;
+        if (popover.contains(e.target)) return;
+        if (anchor && anchor.contains(e.target)) return;
+        if (triggerSelector && e.target.closest(triggerSelector)) return; // trigger clicks toggle, never outside-close
         close();
     }
     function onKey(e) {
@@ -117,6 +127,11 @@ export function createMultiSelect({ getItems, getSelected, onChange, noun = 'ite
     }
 
     function applyToggle(value) {
+        if (single) {
+            onChange(new Set([value]));
+            close();
+            return;
+        }
         const all = allValues();
         let next;
         if (isAllOn()) {
@@ -133,7 +148,8 @@ export function createMultiSelect({ getItems, getSelected, onChange, noun = 'ite
 
     function applyAll() {
         onChange(new Set(allValues()));
-        renderPopover();
+        if (single) close();
+        else renderPopover();
     }
 
     popover.addEventListener('click', (e) => {

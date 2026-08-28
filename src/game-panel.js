@@ -3158,6 +3158,8 @@ function ensureFilterControls() {
         _roundFilter = createMultiSelect({
             noun: 'round',
             allLabel: 'All rounds',
+            single: true,
+            triggerSelector: '.browser-filter-trigger',
             getItems: () => games.getRoundNumbers().map((r) => ({ value: r, label: `Round ${r}` })),
             getSelected: () => games.getVisibleRounds(),
             onChange: (set) => games.setVisibleRounds(set),
@@ -3167,6 +3169,7 @@ function ensureFilterControls() {
         _sectionFilter = createMultiSelect({
             noun: 'section',
             allLabel: 'All sections',
+            triggerSelector: '.browser-filter-trigger',
             getItems: () => games.getSectionList().map((name) => ({ value: name, label: name })),
             getSelected: () => games.getVisibleSections(),
             onChange: (set) => games.setVisibleSections(set),
@@ -3704,7 +3707,9 @@ function wireBrowserListeners(panelEl) {
             const filterTrigger = e.target.closest('.browser-filter-trigger[data-filter]');
             if (filterTrigger) {
                 ensureFilterControls();
-                (filterTrigger.dataset.filter === 'round' ? _roundFilter : _sectionFilter).toggle(filterTrigger);
+                const isRound = filterTrigger.dataset.filter === 'round';
+                (isRound ? _sectionFilter : _roundFilter).close();
+                (isRound ? _roundFilter : _sectionFilter).toggle(filterTrigger);
                 return;
             }
 
