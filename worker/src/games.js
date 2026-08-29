@@ -401,6 +401,7 @@ export function tournamentMeta(t) {
         timeControl: t.time_control || null,
         playerCount: t.player_count || null,
         gameCount: t.game_count || null,
+        pgnGameCount: t.pgn_games ?? null, // games we actually hold with PGN (what the explorer shows)
         director: t.director || null,
         organizer: t.organizer || null,
         tournamentUrl: t.url || null,
@@ -410,7 +411,11 @@ export function tournamentMeta(t) {
 
 export async function handleTournaments(request, env) {
     const result = await env.DB.prepare(
-        `SELECT * FROM tournaments ORDER BY json_extract(round_dates, '$[0]') DESC`
+        `SELECT t.*, COUNT(CASE WHEN g.pgn IS NOT NULL AND g.pgn != '' THEN 1 END) AS pgn_games
+         FROM tournaments t
+         LEFT JOIN games g ON g.tournament_slug = t.slug
+         GROUP BY t.slug
+         ORDER BY json_extract(t.round_dates, '$[0]') DESC`
     ).all();
     return corsResponse(
         { tournaments: result.results.map(tournamentMeta) },

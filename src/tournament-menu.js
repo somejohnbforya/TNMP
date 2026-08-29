@@ -264,7 +264,7 @@ export function createTournamentMenu({ trigger, getTournaments, getActiveSlug, o
                 <span class="tm-row-meta">
                     ${t.playerCount ? `<span class="tm-stat tm-stat-players">${ICON_PLAYERS}${t.playerCount}</span>` : ''}
                     ${t.totalRounds ? `<span class="tm-stat tm-stat-rounds">${ICON_ROUNDS}${t.totalRounds}</span>` : ''}
-                    ${t.gameCount ? `<span class="tm-stat tm-stat-games">${ICON_GAMES}${t.gameCount}</span>` : ''}
+                    ${(t.pgnGameCount ?? t.gameCount) ? `<span class="tm-stat tm-stat-games">${ICON_GAMES}${t.pgnGameCount ?? t.gameCount}</span>` : ''}
                 </span>
             `;
             row.addEventListener('click', () => select(t.slug));
@@ -310,7 +310,10 @@ export function createTournamentMenu({ trigger, getTournaments, getActiveSlug, o
 
         // "Explore all games in range" affordance — reflects the current visible set.
         if (onSelectRange && visible.length >= 2) {
-            const totalGames = visible.reduce((n, it) => n + (it.tournament.gameCount || 0), 0);
+            const totalGames = visible.reduce(
+                (n, it) => n + (it.tournament.pgnGameCount ?? it.tournament.gameCount ?? 0),
+                0,
+            );
             const lo = parseInt(rangeLoEl.value);
             const hi = parseInt(rangeHiEl.value);
             const span = lo === hi ? `${lo}` : `${lo}\u2013${hi}`;
