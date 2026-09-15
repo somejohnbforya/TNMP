@@ -1,10 +1,10 @@
 import { DurableObject } from 'cloudflare:workers';
-import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection, pacificNow, extractRatingFloor, floorFromPeak } from './helpers.js';
+import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection, isExtraRated, pacificNow, extractRatingFloor, floorFromPeak } from './helpers.js';
 import { resolveTournament, computeAppState, discoverUpcomingTournaments } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications, retryPendingNotifications } from './push.js';
 import {
     parseTournamentPage, parseStandings,
-    parsePlayerInfo, parseGameResult, findPlayerPairingFromSections,
+    parsePlayerInfo, parseGameResult, isForfeitPairing, findPlayerPairingFromSections,
     findPlayerResultFromSections, composeMessage, composeResultsMessage, composeGamesMessage,
     composeRecapMessage, composeFinalMessage,
 } from './parser.js';
@@ -284,11 +284,15 @@ async function runCronLogic(env) {
     console.log(`Cached appState in KV.`);
     t.kvPutAppState = performance.now() - t0;
 
+    // Byes and forfeit cleanup read standings round columns as TNM rounds, and
+    // the Extra Rated section's columns aren't: it numbers its own rounds.
+    const tnmStandings = standings.filter(s => !isExtraRated(s.section));
+
     t0 = performance.now();
     try {
         const byeTypes = { H: 'half', B: 'full', U: 'zero' };
         const byeStmts = [];
-        for (const section of standings) {
+        for (const section of tnmStandings) {
             for (const p of section.players) {
                 const uscfId = p.id || null;
                 const resolved = canonicalizeByIdOrName(uscfId, p.name);
@@ -313,7 +317,7 @@ async function runCronLogic(env) {
         // fetch hiccup can't wipe good data. Standings always carry the full bye
         // picture (including future requested byes shown as H---), so a full
         // rebuild is complete.
-        if (standings.length > 0) {
+        if (tnmStandings.length > 0) {
             const stmts = [
                 env.DB.prepare(`DELETE FROM byes WHERE tournament_slug = ?`).bind(slug),
                 ...byeStmts,
@@ -336,7 +340,7 @@ async function runCronLogic(env) {
     t0 = performance.now();
     try {
         const forfeitStmts = [];
-        for (const section of standings) {
+        for (const section of tnmStandings) {
             for (const p of section.players) {
                 const resolved = canonicalizeByIdOrName(p.id || null, p.name);
                 for (let i = 0; i < p.rounds.length; i++) {
@@ -456,9 +460,12 @@ async function runCronLogic(env) {
         try {
             const shellStmts = [];
             for (const section of parsed.pairingsSections) {
-                const rnd = section.round;
+                // Extra Rated pairings count their own rounds; their games are
+                // played in the page's current TNM round.
+                const rnd = isExtraRated(section.section) ? parsed.roundNumber : section.round;
                 for (const row of section.rows) {
                     if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) continue;
+                    if (isForfeitPairing(row)) continue;
                     const board = row.board ? parseInt(row.board, 10) || null : null;
                     if (!board) continue;
 

@@ -105,6 +105,12 @@ export function normalizeSection(section) {
     return s;
 }
 
+// The Extra Rated section numbers its own rounds in standings and pairings, so
+// anything that reads a round column as a TNM round has to skip it.
+export function isExtraRated(section) {
+    return normalizeSection(section) === 'Extra Rated';
+}
+
 // US Pacific UTC offset: DST (2nd Sun Mar → 1st Sun Nov) = -07:00, else -08:00
 export function pacificOffset(year, month, day) {
     if (month >= 4 && month <= 10) return '-07:00';

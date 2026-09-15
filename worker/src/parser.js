@@ -31,6 +31,12 @@ export function parseGameResult(whiteResult, blackResult) {
     return '*';
 }
 
+// A forfeit shows in the pairings table as an X (win) or F (loss) beside the
+// score, e.g. "1 X" against "0 F". No game was played, so it gets no game row.
+export function isForfeitPairing(row) {
+    return /[XF]/i.test(row.whiteResult) || /[XF]/i.test(row.blackResult);
+}
+
 function parseNameCell(cellHtml) {
     const linkMatch = cellHtml.match(/<a\s+href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/i);
     const url = linkMatch ? linkMatch[1] : null;

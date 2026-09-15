@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractRatingFloor, floorFromPeak } from './helpers.js';
+import { extractRatingFloor, floorFromPeak, isExtraRated } from './helpers.js';
 
 describe('extractRatingFloor', () => {
     it('reads a floor off the regular rating entry', () => {
@@ -43,5 +43,19 @@ describe('floorFromPeak', () => {
 
     it('caps at 2100', () => {
         expect(floorFromPeak(2500)).toBe(2100);
+    });
+});
+
+describe('isExtraRated', () => {
+    it('recognizes the Extra Rated section under the spellings MI uses', () => {
+        expect(isExtraRated('Extra Rated')).toBe(true);
+        expect(isExtraRated('Extra rated')).toBe(true);
+        expect(isExtraRated('Extra Rated Games')).toBe(true);
+    });
+
+    it('is false for regular sections and a missing name', () => {
+        expect(isExtraRated('2000+')).toBe(false);
+        expect(isExtraRated('u1600')).toBe(false);
+        expect(isExtraRated(null)).toBe(false);
     });
 });

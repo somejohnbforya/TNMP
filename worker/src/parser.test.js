@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-    parsePlayerInfo, hasPairings, hasResults,
+    parsePlayerInfo, hasPairings, hasResults, isForfeitPairing,
     composeMessage, composeResultsMessage,
     parseTournamentList, parseRoundDates, extractTournamentName,
     parseStandings,
@@ -21,6 +21,22 @@ beforeAll(() => {
     html = parseTournamentPage(fullHtml).strippedHtml;
     tournamentListHtml = readFileSync(resolve(__dirname, '../../test/fixtures/tournament-list-snippet.html'), 'utf-8');
     tournamentDetailHtml = readFileSync(resolve(__dirname, '../../test/fixtures/tournament-detail-snippet.html'), 'utf-8');
+});
+
+// --- isForfeitPairing ---
+
+describe('isForfeitPairing', () => {
+    // Cell text as MI's pairings table shows it (Fall 2026 round 2, boards 35-37).
+    it('is true when either side carries a forfeit marker', () => {
+        expect(isForfeitPairing({ whiteResult: '1 X', blackResult: '0 F' })).toBe(true);
+        expect(isForfeitPairing({ whiteResult: '0 F', blackResult: '1 X' })).toBe(true);
+    });
+
+    it('is false for played games and for pairings without results yet', () => {
+        expect(isForfeitPairing({ whiteResult: '1', blackResult: '0' })).toBe(false);
+        expect(isForfeitPairing({ whiteResult: '½', blackResult: '½' })).toBe(false);
+        expect(isForfeitPairing({ whiteResult: '', blackResult: '' })).toBe(false);
+    });
 });
 
 // --- parsePlayerInfo ---
