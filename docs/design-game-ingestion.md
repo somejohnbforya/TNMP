@@ -1,6 +1,6 @@
 # Game ingestion: identify a game by who played it, not by its board
 
-**Status:** open questions ruled by John on 2026-09-14 (see Decisions); build not started. Written 2026-09-14.
+**Status:** open questions ruled by John on 2026-09-14 (see Decisions). Shipped: §9 plus two §2 rules that are safe in today's cron (`76f75a0`), and the §8 repair for Spring, Silman, and Summer (applied 2026-09-14). `reconcile` not started. Written 2026-09-14.
 **Scope:** the worker cron's game ingestion and byes rebuild (`worker/src/cron.js`, `worker/src/parser.js`), the D1 `games` schema, and the two places in the client that derive a game's identity from its board.
 **Related:** `8de137f` (the unblock: a colliding GameId no longer sinks a round; failed writes retry and show in `/health`).
 
@@ -138,11 +138,26 @@ A one-time script runs `reconcile` in dry-run over every tournament whose MI pag
 - Summer R2 Guan–Harris, an Extra Rated row with no moves filed under the Extra Rated heading's round (its PGN, `4.45`, is in R4)
 - The byes table of every cron-era tournament, rebuilt under §9's rule. This clears the 110 Extra Rated rows and Spring's 36 shifted rows.
 
+**Applied 2026-09-14 to Spring, Silman, and Summer** with `local/scripts/repair-2026-09-14.mjs`, a targeted script, since `reconcile` doesn't exist yet. What it did:
+
+- deleted 20 rows (forfeits, pairings never played, duplicates)
+- moved 8 Extra Rated boards
+- restored three lost games, including Spring R7 Mays-Smith–Booth, whose board-less PGN predates `5dfa7b8` and was never stored
+- rebuilt byes from regular sections only: Spring 230 → 142, Silman 224 → 177, Summer 232 → 166
+
+Every change was validated against production's rows before the first write. The byes rebuild came from running the fixed cron on each tournament's final page. Afterwards:
+
+- every PGN on the three pages is stored with its moves
+- no byes row contradicts a regular-section game
+- no rows without moves or invented boards remain
+
+Every touched row is backed up in `local/data/repair-2026-09-14/backup.json`. Fall R2's Extra Rated rows (boards 928, 933, 949, and the board-41 duplicate) wait for `reconcile`, because today's cron would re-create them from the page.
+
 ### 9. Byes come only from regular sections
 
 The byes rebuild skips Extra Rated standings sections, because their H/B/U describe Extra Rated rounds, not TNM rounds. A bye and an Extra Rated game on the same night are both true, so any check that a bye "contradicts" a game must ignore Extra Rated games.
 
-This rule doesn't depend on the rest of the redesign and could ship on its own.
+This rule doesn't depend on the rest of the redesign, and it shipped on its own in `76f75a0`. Two §2 rules that are safe in today's cron shipped with it: forfeited pairings get no game row, and Extra Rated pairings are filed under the page's TNM round.
 
 ### 10. Extra Rated board numbers follow MI's convention
 
@@ -152,6 +167,7 @@ The fallback, precisely:
 
 - "Last regular board" is the highest board number among the round's regular-section games. Byes carry no board number in the pairings table.
 - Numbers already taken in the round are skipped, including Extra Rated boards the pairings table did publish.
+- A published Extra Rated number that is also a regular board in that round is treated as unlisted, so a round never shows two games on one board number.
 - Unlisted Extra Rated games are numbered in the order their PGNs appear in MI's file.
 - Once stored, a number changes only if the pairings table publishes a different one, so a later PGN never renumbers earlier games.
 
@@ -159,7 +175,7 @@ Evidence from MI's pages:
 
 - **Silman R7:** regular boards end at 39; the Extra Rated game is on 40.
 - **Fall R2:** regular boards end at 38. The pairings table lists one Extra Rated game, Hasteer–Guan on 41, and leaves 39 and 40 unlisted. The convention gives the two unlisted games 39 (Hasteer–Robinson) and 40 (Tobias–Hallman), in file order.
-- **Summer R7:** MI's own pairings table put Extra Rated Langendorf–Martin on board 38 alongside U1600 Kojevnikov–Harris, also on 38. Now that the board is not part of a game's identity, both keep the number MI published.
+- **Summer R7:** MI's own pairings table put Extra Rated Langendorf–Martin on board 38 alongside U1600 Kojevnikov–Harris, also on 38. Under the collision rule above, Langendorf–Martin takes the next free board, 40 (39 is Casares–Santiago's).
 - **PGN board tags are not used for Extra Rated games.** Summer's `6.8` gave an Extra Rated game a regular board, and that collision is how Walder–Shrauger was lost.
 
 ## Rejected alternatives
@@ -224,7 +240,7 @@ This is John's description of how the club numbers these games. An Extra Rated g
 ## Plan
 
 1. Build `reconcile` with acceptance tests 3–5, using saved pages as fixtures.
-2. Dry-run the repair script on the tournaments in Decision 4, review, apply.
+2. Repair the tournaments in Decision 4. Done for Spring, Silman, and Summer on 2026-09-14 (§8). Fall's Extra Rated rows are corrected by `reconcile` once it runs.
 3. Ship the migration (§6) and the cron switch-over, deployed outside the Monday and Tuesday cron windows.
 4. Run the audit (acceptance 1, 2, and 6) against production.
 
