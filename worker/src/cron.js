@@ -113,8 +113,12 @@ async function runCronLogic(env) {
         await updateLastCheck(env, { pairingsFound: hasPairingsFlag });
         return;
     }
-    await env.SUBSCRIBERS.put('cache:htmlHash', hash);
     console.log('HTML changed, processing...');
+
+    // The page counts as processed only once every write from it has landed:
+    // its hash is saved at the end, so a failed write retries on the next tick
+    // instead of waiting for MI to edit the page again.
+    const writeErrors = [];
 
     t0 = performance.now();
     const parsed = parseTournamentPage(html);
@@ -321,6 +325,7 @@ async function runCronLogic(env) {
         }
     } catch (err) {
         console.error('Failed to persist byes:', err.message);
+        writeErrors.push(`byes: ${err.message}`);
     }
     t.byes = performance.now() - t0;
 
@@ -355,6 +360,7 @@ async function runCronLogic(env) {
         }
     } catch (err) {
         console.error('Failed to clean forfeit shells:', err.message);
+        writeErrors.push(`forfeit cleanup: ${err.message}`);
     }
     t.forfeitCleanup = performance.now() - t0;
 
@@ -375,17 +381,27 @@ async function runCronLogic(env) {
         const totalParsed = Object.values(parsed.fullGames).reduce((sum, g) => sum + g.length, 0);
         console.log(`fullGames: ${totalParsed} games across rounds ${Object.keys(parsed.fullGames).join(', ')}`);
         t0 = performance.now();
+        const rowKeyOf = (roundNum, g) => `${slug}:${roundNum}:${g.board}`;
+        const needsWrite = (roundNum, g) => {
+            const ex = existingMap.get(`${roundNum}:${g.board}`);
+            return g.board !== null && !(ex && ex.hasPgn && ex.result === g.result);
+        };
+        const pending = Object.entries(parsed.fullGames).flatMap(([roundNum, games]) => games
+            .filter(g => needsWrite(roundNum, g))
+            .map(g => ({ rowKey: rowKeyOf(roundNum, g), gameId: g.gameId })));
+        const gameIds = resolveGameIds(pending, await loadGameIdOwners(env, pending.map(p => p.gameId)));
         for (const [roundNum, games] of Object.entries(parsed.fullGames)) {
             // Canonical ISO-datetime for this round (e.g. 2026-05-12T18:30:00-07:00).
             // Use this instead of the PGN [Date] header so the games.date column
             // stays in one consistent format for sortable lex comparison.
             const canonicalDate = tournament.roundDates?.[parseInt(roundNum) - 1] || null;
             for (const g of games) {
-                if (g.board === null) continue;
-                const key = `${roundNum}:${g.board}`;
-                const ex = existingMap.get(key);
-
-                if (ex && ex.hasPgn && ex.result === g.result) continue;
+                if (!needsWrite(roundNum, g)) continue;
+                const ex = existingMap.get(`${roundNum}:${g.board}`);
+                const rowKey = rowKeyOf(roundNum, g);
+                if (g.gameId && !gameIds.get(rowKey)) {
+                    console.warn(`GameId ${g.gameId} collides with another game; storing ${rowKey} without it.`);
+                }
 
                 const w = canonicalize(g.white);
                 const b = canonicalize(g.black);
@@ -414,7 +430,7 @@ async function runCronLogic(env) {
                         g.result,
                         opening ? opening.eco : g.eco,
                         opening ? opening.name : null,
-                        normalizeSection(g.section), canonicalDate, g.gameId || null, g.pgn
+                        normalizeSection(g.section), canonicalDate, gameIds.get(rowKey), g.pgn
                     )
                 );
                 if (ex) updatedCount++;
@@ -432,6 +448,7 @@ async function runCronLogic(env) {
         t.fullGamesWrite = performance.now() - t0;
     } catch (err) {
         console.error('Failed to store games in D1:', err.message, err.stack);
+        writeErrors.push(`games: ${err.message}`);
     }
 
     t0 = performance.now();
@@ -481,6 +498,7 @@ async function runCronLogic(env) {
             }
         } catch (err) {
             console.error('Failed to upsert shell records:', err.message, err.stack);
+            writeErrors.push(`shell records: ${err.message}`);
         }
     }
     t.shellRecords = performance.now() - t0;
@@ -504,6 +522,7 @@ async function runCronLogic(env) {
         ).bind(maxRound.max_round, sections.length > 0 ? JSON.stringify(sections) : null, slug).run();
     } catch (err) {
         console.error('Failed to update tournament metadata:', err.message);
+        writeErrors.push(`tournament metadata: ${err.message}`);
     }
 
     if (newAliases.length > 0) {
@@ -516,10 +535,12 @@ async function runCronLogic(env) {
             console.log(`Auto-aliased ${newAliases.length} name(s): ${newAliases.map(a => `${a.norm} → ${a.canonicalName}`).join(', ')}`);
         } catch (err) {
             console.error('Failed to persist new aliases:', err.message);
+            writeErrors.push(`aliases: ${err.message}`);
         }
     }
 
-    await updateLastCheck(env, { pairingsFound: parsed.hasPairings });
+    if (writeErrors.length === 0) await env.SUBSCRIBERS.put('cache:htmlHash', hash);
+    await updateLastCheck(env, { pairingsFound: parsed.hasPairings, error: writeErrors.join('; ') || null });
 
     t0 = performance.now();
     await dispatchAllNotifications(parsed, tournament, env);
@@ -531,6 +552,43 @@ async function runCronLogic(env) {
 
     const total = Object.values(t).reduce((s, v) => s + v, 0);
     console.log(`[TIMING] ${Object.entries(t).map(([k, v]) => `${k}=${v.toFixed(1)}ms`).join(' | ')} | total=${total.toFixed(1)}ms`);
+}
+
+// game_id → the row holding it, as `slug:round:board`, across every tournament
+// (the UNIQUE index on games.game_id is global). Chunked under D1's limit of 100
+// bound parameters per query.
+async function loadGameIdOwners(env, gameIds) {
+    const ids = [...new Set(gameIds.filter(Boolean))];
+    const owners = new Map();
+    for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100);
+        const { results } = await env.DB.prepare(
+            `SELECT game_id, tournament_slug, round, board FROM games WHERE game_id IN (${chunk.map(() => '?').join(', ')})`
+        ).bind(...chunk).all();
+        for (const r of results) owners.set(r.game_id, `${r.tournament_slug}:${r.round}:${r.board}`);
+    }
+    return owners;
+}
+
+// Which GameId each pending write may store (rowKey → id or null). game_id is
+// UNIQUE because share links resolve by it, and a D1 batch is all-or-nothing,
+// so one colliding id used to sink the whole round. MI's exporter does collide
+// (Fall 2026 round 2 stamped one id on two different Extra Rated games), so a
+// collision costs the id, never the game: a row that already holds an id keeps
+// it, so existing share links still resolve, and an id claimed by two writes
+// goes to neither, since nothing says which header is the real one.
+export function resolveGameIds(pending, owners) {
+    const claims = new Map();
+    for (const { gameId } of pending) {
+        if (gameId) claims.set(gameId, (claims.get(gameId) || 0) + 1);
+    }
+    const resolved = new Map();
+    for (const { rowKey, gameId } of pending) {
+        const owner = gameId ? owners.get(gameId) : undefined;
+        const keep = gameId && (owner ? owner === rowKey : claims.get(gameId) === 1);
+        resolved.set(rowKey, keep ? gameId : null);
+    }
+    return resolved;
 }
 
 export function pairingsExpiresAt(roundDates, round) {
