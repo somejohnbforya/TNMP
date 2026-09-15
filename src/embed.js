@@ -34,7 +34,7 @@ const FEAT = {
 import { openModal, trapFocus } from './modal.js';
 import { initStyle, syncStylePane } from './style.js';
 import { showToast } from './toast.js';
-import { formatName, getHeader, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
+import { getHeader, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 import {
     openGamePanel,
@@ -61,6 +61,7 @@ import {
     applyEngineSettings,
     getGamePgn,
     getGameMoves,
+    getShareTarget,
     getCurrentNodeId,
     getNodes,
     toggleNag,
@@ -271,9 +272,7 @@ function handleShareAction(action) {
             () => showToast('Could not copy to clipboard', 'error'),
         );
     } else if (action === 'copy-link') {
-        const gameId = getHeader(pgn, 'GameId');
-        const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];
-        navigator.clipboard.writeText(url).then(
+        navigator.clipboard.writeText(getShareTarget().url).then(
             () => showToast('Link copied!', 'success'),
             () => showToast('Could not copy to clipboard', 'error'),
         );
@@ -283,14 +282,7 @@ function handleShareAction(action) {
         const d = (getHeader(pgn, 'Date') || '').replace(/\./g, '');
         downloadPgn(pgn, d ? `${w}-${b}-${d}.pgn` : `${w}-${b}.pgn`);
     } else if (action === 'share') {
-        const gameId = getHeader(pgn, 'GameId');
-        const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];
-        navigator
-            .share({
-                title: `${formatName(getHeader(pgn, 'White'))} vs ${formatName(getHeader(pgn, 'Black'))} — ${getHeader(pgn, 'Result')}`,
-                url,
-            })
-            .catch(() => {});
+        navigator.share(getShareTarget()).catch(() => {});
     }
 }
 

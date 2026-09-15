@@ -11,6 +11,34 @@ export function formatName(name) {
     return parts.length === 2 ? `${parts[1]} ${parts[0]}` : name;
 }
 
+const SHAREABLE_GAME_ID = /^\d{10,20}$/;
+
+/**
+ * What Share and Copy link point at for an open game. A game the server stored
+ * (it has a tournament) is shared by its stored GameId and described by its
+ * stored names and result: its PGN headers are the recorder's typing, and a
+ * GameId dropped for colliding with another game still sits in its PGN, where
+ * it links to nothing. A pasted or imported game shares what its PGN says.
+ * Without a usable GameId, the page itself is shared.
+ * @param {object|null} game - stored game record, or null
+ * @param {string} pgn - the game's PGN as open in the viewer
+ * @param {string} pageUrl - fallback URL
+ * @returns {{ url: string, title: string }}
+ */
+export function shareTarget(game, pgn, pageUrl) {
+    if (game?.tournamentSlug) {
+        return {
+            url: SHAREABLE_GAME_ID.test(game.gameId) ? `https://tnmpairings.com?game=${game.gameId}` : pageUrl,
+            title: `${formatName(game.white)} vs ${formatName(game.black)} — ${game.result}`,
+        };
+    }
+    const gameId = getHeader(pgn, 'GameId');
+    return {
+        url: gameId ? `https://tnmpairings.com?game=${gameId}` : pageUrl,
+        title: `${formatName(getHeader(pgn, 'White'))} vs ${formatName(getHeader(pgn, 'Black'))} — ${getHeader(pgn, 'Result')}`,
+    };
+}
+
 /**
  * Get CSS class for a game result from a specific side's perspective.
  * @param {string} result - PGN result string ("1-0", "0-1", "1/2-1/2")

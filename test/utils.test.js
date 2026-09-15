@@ -1,5 +1,57 @@
 import { describe, it, expect } from 'vitest';
-import { formatName, resultClass, resultSymbol, getHeader, fenToEpd, resultDisplay } from '../src/utils.js';
+import { formatName, resultClass, resultSymbol, getHeader, fenToEpd, resultDisplay, shareTarget } from '../src/utils.js';
+
+describe('shareTarget', () => {
+    const PAGE = 'https://tnmpairings.com/';
+    // Fall 2026 R2: MI stamped GameId 2352688410645319 on two different games,
+    // so neither stores it, but each PGN still carries it.
+    const collidedPgn = [
+        '[Event "2026 Fall TNM: Extra rated"]',
+        '[Round "2"]',
+        '[White "Hasteer, Divija"]',
+        '[Black "Robinson, Damian"]',
+        '[Result "1-0"]',
+        '[GameId "2352688410645319"]',
+        '',
+        '1. e4 d6 1-0',
+    ].join('\n');
+
+    it('shares a stored game by its stored GameId, with its stored names and result', () => {
+        const game = {
+            tournamentSlug: '2026-fall-tuesday-night-marathon',
+            gameId: '2352688410596131',
+            white: 'Jimmy Heiserman',
+            black: 'Zelin Fang',
+            result: '1-0',
+        };
+        expect(shareTarget(game, '[White "Heiserman, Jimmy"]', PAGE)).toEqual({
+            url: 'https://tnmpairings.com?game=2352688410596131',
+            title: 'Jimmy Heiserman vs Zelin Fang — 1-0',
+        });
+    });
+
+    it("shares the page for a stored game whose GameId was dropped, never the PGN's copy", () => {
+        const game = {
+            tournamentSlug: '2026-fall-tuesday-night-marathon',
+            gameId: '2026-fall-tuesday-night-marathon:2:933',
+            white: 'Divija Hasteer',
+            black: 'Damian Robinson',
+            result: '1-0',
+        };
+        expect(shareTarget(game, collidedPgn, PAGE)).toEqual({
+            url: PAGE,
+            title: 'Divija Hasteer vs Damian Robinson — 1-0',
+        });
+    });
+
+    it('shares a pasted game by what its PGN says', () => {
+        expect(shareTarget({ tournamentSlug: null, gameId: 'local-0' }, collidedPgn, PAGE)).toEqual({
+            url: 'https://tnmpairings.com?game=2352688410645319',
+            title: 'Divija Hasteer vs Damian Robinson — 1-0',
+        });
+        expect(shareTarget(null, '[White "A, B"]\n[Black "C, D"]\n[Result "*"]', PAGE).url).toBe(PAGE);
+    });
+});
 
 describe('formatName', () => {
     it('converts "Last, First" to "First Last"', () => {

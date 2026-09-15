@@ -15,6 +15,7 @@ import { nagToHtml, splitPgn } from './pgn-parser.js';
 import { FIELD_SCHEMA } from './record.js';
 import {
     formatName,
+    shareTarget,
     resultClass,
     resultSymbol,
     scorePercent,
@@ -3842,6 +3843,7 @@ export const getActiveTabGame = () => {
     // Return a copy with the current in-tab PGN (may include edits).
     return { ...cached, pgn: _activeTab.game?.getPgn() || cached.pgn };
 };
+export const getShareTarget = () => shareTarget(getActiveTabGame(), getGamePgn(), window.location.href.split('?')[0]);
 export const toggleAutoPlay = () => _activeTab.game.toggleAutoPlay();
 export const toggleComments = () => _activeTab.game.toggleComments();
 export const toggleBranchMode = () => _activeTab.game.toggleBranchMode();

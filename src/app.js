@@ -52,6 +52,7 @@ import {
     initGamePanel,
     getActiveTabEl,
     getActiveTabGame,
+    getShareTarget,
     openGameInTab,
     openExplorerInTab,
 } from './game-panel.js';
@@ -72,7 +73,7 @@ import {
 } from './games.js';
 import { openCollectionBrowser } from './collection-browser.js';
 import { queryGames, prefetchGames } from './tnm.js';
-import { formatName, getHeader, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
+import { getHeader, closeMenu, toggleMenu, closeAllMenus } from './utils.js';
 import { initPlayerProfile, openPlayerProfile } from './player-profile.js';
 import { initEstimator, openEstimator } from './estimator.js';
 import { openGifMaker } from './gif-maker.js'; // also registers #gif hash trigger + window.openGifMaker
@@ -655,19 +656,17 @@ async function handleShareAction(action) {
             showToast('Could not copy to clipboard', 'error');
         }
     } else if (action === 'copy-link') {
-        const gameId = getHeader(pgn, 'GameId');
-        const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];
         try {
-            await navigator.clipboard.writeText(url);
+            await navigator.clipboard.writeText(getShareTarget().url);
             showToast('Link copied!', 'success');
         } catch {
             showToast('Could not copy to clipboard', 'error');
         }
     } else if (action === 'download') {
         // Name by the game's own tournament, not the app's current TNM —
-        // locally-imported games have no GameId and fall through to
+        // locally-imported games have no tournament and fall through to
         // White-Black-Date.
-        const slug = getCachedGame(getHeader(pgn, 'GameId'))?.tournamentSlug;
+        const slug = getActiveTabGame()?.tournamentSlug;
         const w = getHeader(pgn, 'White')?.split(',')[0] || 'White';
         const b = getHeader(pgn, 'Black')?.split(',')[0] || 'Black';
         const r = getHeader(pgn, 'Round')?.split('.')[0];
@@ -681,13 +680,8 @@ async function handleShareAction(action) {
     } else if (action === 'video') {
         openGifMaker(pgn);
     } else if (action === 'share') {
-        const gameId = getHeader(pgn, 'GameId');
-        const url = gameId ? `https://tnmpairings.com?game=${gameId}` : window.location.href.split('?')[0];
         try {
-            await navigator.share({
-                title: `${formatName(getHeader(pgn, 'White'))} vs ${formatName(getHeader(pgn, 'Black'))} — ${getHeader(pgn, 'Result')}`,
-                url,
-            });
+            await navigator.share(getShareTarget());
         } catch {
             /* cancelled */
         }
