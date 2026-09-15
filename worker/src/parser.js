@@ -68,7 +68,6 @@ function parsePairingsTable(tableHtml) {
 }
 
 export function parseTournamentPage(html) {
-    const pgnColors = {};
     const gameMap = new Map();
     const textareaRegex = /<textarea\s+id="pgn-textarea-(\d+)"[^>]*>([\s\S]*?)<\/textarea>/gi;
     let taMatch;
@@ -85,7 +84,7 @@ export function parseTournamentPage(html) {
 
             const resultMatch = game.match(/\[Result\s+"([^"]+)"\]/);
             const roundNum = parseInt(roundMatch[1], 10);
-            let board = roundMatch[2] ? parseInt(roundMatch[2], 10) : null;
+            const board = roundMatch[2] ? parseInt(roundMatch[2], 10) : null;
 
             const whiteEloMatch = game.match(/\[WhiteElo\s+"([^"]+)"\]/);
             const blackEloMatch = game.match(/\[BlackElo\s+"([^"]+)"\]/);
@@ -102,27 +101,11 @@ export function parseTournamentPage(html) {
                 }
             }
 
-            // Extra Rated games sometimes ship with `[Round "X"]` (no board
-            // number) instead of "X.Y". Synthesize a stable board from a hash
-            // of the players so the same game always maps to the same row,
-            // and use a high range (900+) to avoid colliding with the regular
-            // pairings (boards 1-50ish). Idempotent across re-parses.
-            if (board === null && section && /extra/i.test(section)) {
-                const key = `${whiteMatch[1]}|${blackMatch[1]}`;
-                let h = 0;
-                for (let i = 0; i < key.length; i++) h = ((h << 5) - h + key.charCodeAt(i)) | 0;
-                board = 900 + (Math.abs(h) % 100);
-            }
-
-            if (!pgnColors[roundNum]) pgnColors[roundNum] = [];
-            pgnColors[roundNum].push({
-                white: whiteMatch[1],
-                black: blackMatch[1],
-                result: resultMatch ? resultMatch[1] : null,
-                board,
-            });
-
-            gameMap.set(`${roundNum}:${board}`, {
+            // One entry per round and pair of players, not per board: two PGNs
+            // can name the same board (a mistyped tag, or an Extra Rated game
+            // numbered onto a regular board), and each is its own game. The
+            // cron places boards, including for PGNs that name none.
+            gameMap.set(`${roundNum}:${whiteMatch[1]}|${blackMatch[1]}`, {
                 roundNum,
                 white: whiteMatch[1],
                 black: blackMatch[1],
@@ -182,7 +165,6 @@ export function parseTournamentPage(html) {
     return {
         roundNumber,
         strippedHtml,
-        pgnColors,
         fullGames,
         pairingsSections,
         hasPairings: hasPairingsResult,

@@ -333,51 +333,91 @@ async function runCronLogic(env) {
     }
     t.byes = performance.now() - t0;
 
-    // Forfeit cleanup: standings F markers identify rounds where a player
-    // forfeited. Their game record is a shell (no PGN, never will get one),
-    // so delete it. The pgn-IS-NULL guard ensures we never delete a real
-    // game that somehow matched — only shells.
+    // Pairings that were never played: once standings are posted, a player
+    // marked F (forfeit) or H/B/U (bye) in a round played no regular game that
+    // round, so their pairings row is deleted. Extra Rated rows stay (a player
+    // on a bye can still play an Extra Rated game), and the pgn-IS-NULL guard
+    // never touches a game with moves.
     t0 = performance.now();
     try {
-        const forfeitStmts = [];
+        const unplayedStmts = [];
         for (const section of tnmStandings) {
             for (const p of section.players) {
                 const resolved = canonicalizeByIdOrName(p.id || null, p.name);
                 for (let i = 0; i < p.rounds.length; i++) {
                     const rd = p.rounds[i];
-                    if (rd?.result !== 'F') continue;
-                    forfeitStmts.push(
+                    if (!['F', 'H', 'B', 'U'].includes(rd?.result)) continue;
+                    unplayedStmts.push(
                         env.DB.prepare(
                             `DELETE FROM games WHERE tournament_slug = ? AND round = ?
                              AND (white_norm = ? OR black_norm = ?)
-                             AND (pgn IS NULL OR pgn = '')`
+                             AND (pgn IS NULL OR pgn = '')
+                             AND (section IS NULL OR section NOT LIKE '%extra%')`
                         ).bind(slug, i + 1, resolved.norm, resolved.norm)
                     );
                 }
             }
         }
-        if (forfeitStmts.length > 0) {
-            for (let i = 0; i < forfeitStmts.length; i += 100) {
-                await env.DB.batch(forfeitStmts.slice(i, i + 100));
-            }
-            console.log(`Cleaned up ${forfeitStmts.length} forfeit shell(s) from D1.`);
+        for (let i = 0; i < unplayedStmts.length; i += 100) {
+            await env.DB.batch(unplayedStmts.slice(i, i + 100));
         }
     } catch (err) {
-        console.error('Failed to clean forfeit shells:', err.message);
-        writeErrors.push(`forfeit cleanup: ${err.message}`);
+        console.error('Failed to clean unplayed pairings:', err.message);
+        writeErrors.push(`unplayed pairings cleanup: ${err.message}`);
     }
-    t.forfeitCleanup = performance.now() - t0;
+    t.unplayedCleanup = performance.now() - t0;
 
     let newCount = 0;
     let updatedCount = 0;
     const existingMap = new Map();
+    // Each round's games by pair of players → board: stored rows, then this
+    // run's PGNs. The pairings step reads it so a pairing never re-creates a
+    // game that already sits on another board.
+    const placed = new Map();
+    const pairKey = (normA, normB) => [normA, normB].sort().join('|');
+    const place = (round, key, board) => {
+        if (!placed.has(round)) placed.set(round, new Map());
+        placed.get(round).set(key, board);
+    };
+
+    // The posted pairings, canonicalized once: PGNs are placed around them,
+    // and the pairings step writes them.
+    const posted = [];
+    for (const section of parsed.pairingsSections) {
+        // Extra Rated pairings count their own rounds; their games are
+        // played in the page's current TNM round.
+        const rnd = isExtraRated(section.section) ? parsed.roundNumber : section.round;
+        for (const row of section.rows) {
+            if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) continue;
+            if (isForfeitPairing(row)) continue;
+            const board = row.board ? parseInt(row.board, 10) || null : null;
+            if (!board) continue;
+            const wInfo = parsePlayerInfo(row.whiteName);
+            const bInfo = parsePlayerInfo(row.blackName);
+            const wc = canonicalizeByIdOrName(row.whiteUscfId, wInfo.name);
+            const bc = canonicalizeByIdOrName(row.blackUscfId, bInfo.name);
+            posted.push({
+                rnd, board, section: section.section, row, wInfo, bInfo, wc, bc,
+                key: pairKey(wc.norm, bc.norm), extra: isExtraRated(section.section), hasPgn: false,
+            });
+        }
+    }
+
     try {
         t0 = performance.now();
         const existing = await env.DB.prepare(
-            'SELECT round, board, result, pgn FROM games WHERE tournament_slug = ?'
+            'SELECT round, board, section, white_norm, black_norm, result, pgn FROM games WHERE tournament_slug = ?'
         ).bind(slug).all();
+        const storedByRound = new Map();
         for (const row of existing.results) {
-            existingMap.set(`${row.round}:${row.board}`, { result: row.result, hasPgn: !!row.pgn });
+            const stored = {
+                key: pairKey(row.white_norm, row.black_norm), board: row.board,
+                extra: isExtraRated(row.section), hasPgn: !!row.pgn,
+            };
+            existingMap.set(`${row.round}:${row.board}`, { result: row.result, hasPgn: stored.hasPgn });
+            if (!storedByRound.has(row.round)) storedByRound.set(row.round, []);
+            storedByRound.get(row.round).push(stored);
+            if (stored.hasPgn || !placed.get(row.round)?.has(stored.key)) place(row.round, stored.key, row.board);
         }
         t.loadExistingGames = performance.now() - t0;
 
@@ -385,30 +425,54 @@ async function runCronLogic(env) {
         const totalParsed = Object.values(parsed.fullGames).reduce((sum, g) => sum + g.length, 0);
         console.log(`fullGames: ${totalParsed} games across rounds ${Object.keys(parsed.fullGames).join(', ')}`);
         t0 = performance.now();
-        const rowKeyOf = (roundNum, g) => `${slug}:${roundNum}:${g.board}`;
-        const needsWrite = (roundNum, g) => {
-            const ex = existingMap.get(`${roundNum}:${g.board}`);
-            return g.board !== null && !(ex && ex.hasPgn && ex.result === g.result);
-        };
-        const pending = Object.entries(parsed.fullGames).flatMap(([roundNum, games]) => games
-            .filter(g => needsWrite(roundNum, g))
-            .map(g => ({ rowKey: rowKeyOf(roundNum, g), gameId: g.gameId })));
-        const gameIds = resolveGameIds(pending, await loadGameIdOwners(env, pending.map(p => p.gameId)));
+        // Place each round's PGNs, drop the pairings rows they supersede, and
+        // keep what still needs writing.
+        const writesByRound = new Map();
         for (const [roundNum, games] of Object.entries(parsed.fullGames)) {
+            const round = parseInt(roundNum, 10);
+            const stored = storedByRound.get(round) || [];
+            const pgns = games.map(g => {
+                const w = canonicalize(g.white);
+                const b = canonicalize(g.black);
+                return { g, w, b, key: pairKey(w.norm, b.norm), board: g.board, extra: isExtraRated(g.section) };
+            }).sort((x, y) => x.extra - y.extra);
+            const boards = assignBoards([...stored, ...posted.filter(p => p.rnd === round)], pgns);
+            const roundWrites = [];
+            const seen = new Set();
+            for (const p of pgns) {
+                if (seen.has(p.key)) {
+                    console.warn(`R${round} ${p.g.white} - ${p.g.black}: a second PGN for one pair in one round; keeping the first.`);
+                    continue;
+                }
+                seen.add(p.key);
+                const board = boards.get(p.key);
+                for (const s of stored) {
+                    if (s.key !== p.key || s.board === board || s.hasPgn) continue;
+                    stmts.push(env.DB.prepare(
+                        `DELETE FROM games WHERE tournament_slug = ? AND round = ? AND board = ? AND (pgn IS NULL OR pgn = '')`
+                    ).bind(slug, round, s.board));
+                    existingMap.delete(`${round}:${s.board}`);
+                }
+                place(round, p.key, board);
+                const ex = existingMap.get(`${round}:${board}`);
+                if (ex && ex.hasPgn && ex.result === p.g.result) continue;
+                roundWrites.push({ ...p, board, ex, rowKey: `${slug}:${round}:${board}` });
+                existingMap.set(`${round}:${board}`, { result: p.g.result, hasPgn: true });
+            }
+            writesByRound.set(round, roundWrites);
+        }
+        const pending = [...writesByRound.values()].flat().map(w => ({ rowKey: w.rowKey, gameId: w.g.gameId }));
+        const gameIds = resolveGameIds(pending, await loadGameIdOwners(env, pending.map(p => p.gameId)));
+        for (const [round, roundWrites] of writesByRound) {
             // Canonical ISO-datetime for this round (e.g. 2026-05-12T18:30:00-07:00).
             // Use this instead of the PGN [Date] header so the games.date column
             // stays in one consistent format for sortable lex comparison.
-            const canonicalDate = tournament.roundDates?.[parseInt(roundNum) - 1] || null;
-            for (const g of games) {
-                if (!needsWrite(roundNum, g)) continue;
-                const ex = existingMap.get(`${roundNum}:${g.board}`);
-                const rowKey = rowKeyOf(roundNum, g);
+            const canonicalDate = tournament.roundDates?.[round - 1] || null;
+            for (const { g, w, b, board, ex, rowKey } of roundWrites) {
                 if (g.gameId && !gameIds.get(rowKey)) {
                     console.warn(`GameId ${g.gameId} collides with another game; storing ${rowKey} without it.`);
                 }
 
-                const w = canonicalize(g.white);
-                const b = canonicalize(g.black);
                 const whiteName = w.name, whiteNorm = w.norm;
                 const blackName = b.name, blackNorm = b.norm;
 
@@ -426,7 +490,7 @@ async function runCronLogic(env) {
                           result=excluded.result, eco=excluded.eco, opening_name=excluded.opening_name,
                           section=excluded.section, date=excluded.date, game_id=excluded.game_id, pgn=excluded.pgn`
                     ).bind(
-                        slug, parseInt(roundNum), g.board,
+                        slug, round, board,
                         whiteName, blackName,
                         whiteNorm, blackNorm,
                         g.whiteElo ? parseInt(g.whiteElo) : ratingAtDate(whiteName, g.date),
@@ -459,43 +523,31 @@ async function runCronLogic(env) {
     if (parsed.hasPairings) {
         try {
             const shellStmts = [];
-            for (const section of parsed.pairingsSections) {
-                // Extra Rated pairings count their own rounds; their games are
-                // played in the page's current TNM round.
-                const rnd = isExtraRated(section.section) ? parsed.roundNumber : section.round;
-                for (const row of section.rows) {
-                    if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) continue;
-                    if (isForfeitPairing(row)) continue;
-                    const board = row.board ? parseInt(row.board, 10) || null : null;
-                    if (!board) continue;
+            for (const { rnd, board, section, row, wInfo, bInfo, wc, bc, key } of posted) {
+                const ex = existingMap.get(`${rnd}:${board}`);
+                const result = parseGameResult(row.whiteResult, row.blackResult);
 
-                    const key = `${rnd}:${board}`;
-                    const ex = existingMap.get(key);
-                    const result = parseGameResult(row.whiteResult, row.blackResult);
+                if (ex && (ex.result !== '*' || result === '*')) continue;
+                // This pair's game already sits on another board, where its PGN put it.
+                const at = placed.get(rnd)?.get(key);
+                if (at != null && at !== board) continue;
 
-                    if (ex && (ex.result !== '*' || result === '*')) continue;
-
-                    const wInfo = parsePlayerInfo(row.whiteName);
-                    const bInfo = parsePlayerInfo(row.blackName);
-                    const wc = canonicalizeByIdOrName(row.whiteUscfId, wInfo.name);
-                    const bc = canonicalizeByIdOrName(row.blackUscfId, bInfo.name);
-                    const white = wc.name, whiteNorm = wc.norm;
-                    const black = bc.name, blackNorm = bc.norm;
-                    const roundDate = tournament.roundDates?.[rnd - 1] || null;
-                    shellStmts.push(
-                        env.DB.prepare(
-                            `INSERT INTO games
-                             (tournament_slug, round, board, white, black, white_norm, black_norm, white_elo, black_elo, result, section, date, pgn)
-                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-                             ON CONFLICT(tournament_slug, round, board) DO UPDATE SET
-                              result = excluded.result
-                              WHERE games.result = '*' AND excluded.result != '*'`
-                        ).bind(slug, rnd, board, white, black, whiteNorm, blackNorm,
-                            wInfo.rating || ratingAtDate(white, roundDate),
-                            bInfo.rating || ratingAtDate(black, roundDate),
-                            result, normalizeSection(section.section), roundDate)
-                    );
-                }
+                const white = wc.name, whiteNorm = wc.norm;
+                const black = bc.name, blackNorm = bc.norm;
+                const roundDate = tournament.roundDates?.[rnd - 1] || null;
+                shellStmts.push(
+                    env.DB.prepare(
+                        `INSERT INTO games
+                         (tournament_slug, round, board, white, black, white_norm, black_norm, white_elo, black_elo, result, section, date, pgn)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                         ON CONFLICT(tournament_slug, round, board) DO UPDATE SET
+                          result = excluded.result
+                          WHERE games.result = '*' AND excluded.result != '*'`
+                    ).bind(slug, rnd, board, white, black, whiteNorm, blackNorm,
+                        wInfo.rating || ratingAtDate(white, roundDate),
+                        bInfo.rating || ratingAtDate(black, roundDate),
+                        result, normalizeSection(section), roundDate)
+                );
             }
             for (let i = 0; i < shellStmts.length; i += 100) {
                 await env.DB.batch(shellStmts.slice(i, i + 100));
@@ -559,6 +611,52 @@ async function runCronLogic(env) {
 
     const total = Object.values(t).reduce((s, v) => s + v, 0);
     console.log(`[TIMING] ${Object.entries(t).map(([k, v]) => `${k}=${v.toFixed(1)}ms`).join(' | ')} | total=${total.toFixed(1)}ms`);
+}
+
+// The board each PGN in a round goes on. MI's sources arrive in trust order:
+// pairings on Monday, results that can reshuffle them, then PGNs recording
+// where each game was actually played. So a PGN takes the board it names,
+// unless another pair's game holds it; else its pair's stored board (for an
+// Extra Rated game, the one MI adds to the pairings after results); else the
+// next free board past the round's regular games, which is how MI numbers
+// Extra Rated games. A game already stored with moves keeps its board, regular
+// games are placed before Extra Rated ones, and a pair's first PGN wins.
+// rows: the round's stored and posted games, as { key, board, extra, hasPgn }
+// pgns: the round's PGNs in file order, as { key, board, extra }
+// Returns pair key → board.
+export function assignBoards(rows, pgns) {
+    const holder = new Map(); // board → pair key
+    const regularBoards = new Set();
+    const own = new Map(); // pair key → its row, preferring one with moves
+    const hold = (board, key, extra) => {
+        holder.set(board, key);
+        if (!extra) regularBoards.add(board);
+    };
+    for (const r of rows) {
+        if (r.board == null) continue;
+        if (!holder.has(r.board)) hold(r.board, r.key, r.extra);
+        const prev = own.get(r.key);
+        if (!prev || (r.hasPgn && !prev.hasPgn)) own.set(r.key, r);
+    }
+
+    const boards = new Map();
+    for (const p of [...pgns.filter(p => !p.extra), ...pgns.filter(p => p.extra)]) {
+        if (boards.has(p.key)) continue;
+        const isFree = (board) => board != null && (!holder.has(board) || holder.get(board) === p.key);
+        const stored = own.get(p.key);
+        let board;
+        if (stored?.hasPgn && isFree(stored.board)) board = stored.board;
+        else if (isFree(p.board)) board = p.board;
+        else if (stored && isFree(stored.board)) board = stored.board;
+        else {
+            board = Math.max(0, ...regularBoards) + 1;
+            while (holder.has(board)) board++;
+        }
+        if (stored && stored.board !== board && holder.get(stored.board) === p.key) holder.delete(stored.board);
+        hold(board, p.key, p.extra);
+        boards.set(p.key, board);
+    }
+    return boards;
 }
 
 // game_id → the row holding it, as `slug:round:board`, across every tournament

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveGameIds } from './cron.js';
+import { resolveGameIds, assignBoards } from './cron.js';
 
 const FALL_R2_ERG_ID = '2352688410645319';
 
@@ -42,5 +42,57 @@ describe('resolveGameIds', () => {
         ], owners);
         expect(ids.get('fall:2:933')).toBe(FALL_R2_ERG_ID);
         expect(ids.get('fall:2:949')).toBeNull();
+    });
+});
+
+describe('assignBoards', () => {
+    const row = (key, board, { extra = false, hasPgn = false } = {}) => ({ key, board, extra, hasPgn });
+    const pgn = (key, board, extra = false) => ({ key, board, extra });
+    const regularRows = (upTo) => Array.from({ length: upTo }, (_, i) => row(`regular-${i + 1}`, i + 1));
+
+    // Fall 2026 R2: regular games end on 38 (26, 35 and 36 were forfeits). MI's
+    // pairings list Hasteer–Guan on 41 but not the other two Extra Rated games,
+    // and none of the three PGNs names a board.
+    it('numbers Extra Rated games from the pairings, else right after the regular boards', () => {
+        const rows = [
+            ...regularRows(38).filter(r => ![26, 35, 36].includes(r.board)),
+            row('guan|hasteer', 41, { extra: true }),
+        ];
+        const boards = assignBoards(rows, [
+            pgn('hasteer|robinson', null, true),
+            pgn('guan|hasteer', null, true),
+            pgn('hallman|tobias', null, true),
+        ]);
+        expect(Object.fromEntries(boards)).toEqual({ 'hasteer|robinson': 39, 'guan|hasteer': 41, 'hallman|tobias': 40 });
+    });
+
+    // Summer 2026 R6: Walder–Shrauger (regular) and Canessa–Langendorf (Extra
+    // Rated) were both tagged 6.8, with Extra Rated games already on 38–40.
+    it("never puts a game on another pair's board, and places regular games first", () => {
+        const rows = [
+            ...regularRows(37).map(r => (r.board === 8 ? row('shrauger|walder', 8) : r)),
+            row('erg-a', 38, { extra: true, hasPgn: true }),
+            row('erg-b', 39, { extra: true, hasPgn: true }),
+            row('erg-c', 40, { extra: true, hasPgn: true }),
+        ];
+        const boards = assignBoards(rows, [pgn('canessa|langendorf', 8, true), pgn('shrauger|walder', 8)]);
+        expect(boards.get('shrauger|walder')).toBe(8);
+        expect(boards.get('canessa|langendorf')).toBe(41);
+    });
+
+    // Summer 2026 R3: the pairings had Diller–Hasteer on 43; its PGN says 3.2.
+    it("takes the board the PGN records over the pairings' board", () => {
+        const rows = [row('pang|yoo', 1, { hasPgn: true }), row('diller|hasteer', 43)];
+        expect(assignBoards(rows, [pgn('diller|hasteer', 2)]).get('diller|hasteer')).toBe(2);
+    });
+
+    it("falls back to its pair's stored board when the board it names is taken", () => {
+        const rows = [row('a|b', 5), row('c|d', 7)];
+        expect(assignBoards(rows, [pgn('c|d', 5)]).get('c|d')).toBe(7);
+    });
+
+    it('keeps a game already stored with moves on its board', () => {
+        const rows = [...regularRows(37), row('canessa|langendorf', 41, { extra: true, hasPgn: true })];
+        expect(assignBoards(rows, [pgn('canessa|langendorf', 50, true)]).get('canessa|langendorf')).toBe(41);
     });
 });

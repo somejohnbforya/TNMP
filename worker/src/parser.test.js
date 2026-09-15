@@ -333,10 +333,27 @@ describe('parseTournamentPage', () => {
         expect(result.hasPairings).toBe(true);
         expect(result.hasResults).toBe(true);
         expect(result.pairingsSections.length).toBeGreaterThan(0);
-        expect(Object.keys(result.pgnColors).length).toBeGreaterThan(0);
         expect(Object.keys(result.fullGames).length).toBeGreaterThan(0);
         expect(result.strippedHtml).toContain('<h2>Standings</h2>');
         expect(result.strippedHtml).toContain('<h2>Pairings</h2>');
+    });
+
+    it('keeps every PGN when two name the same board, and invents no board when a PGN names none', () => {
+        const pgn = (event, round, white, black) =>
+            `[Event "${event}"]\n[Round "${round}"]\n[White "${white}"]\n[Black "${black}"]\n[Result "1-0"]\n\n1. e4 e5 1-0`;
+        // Summer 2026 R6 tagged a regular game and an Extra Rated game both 6.8;
+        // Silman's Extra Rated PGNs name only the round.
+        const html = `<textarea id="pgn-textarea-6">${[
+            pgn('2026 Summer TNM: 2000+', '6.8', 'Walder, Michael', 'Shrauger, Alex Hayden'),
+            pgn('2026 Summer TNM: Extra Rated', '6.8', 'Canessa, Kate', 'Langendorf, Brian Keith'),
+            pgn('3rd Silman TNM: Extra Rated', '6', 'Booth, Kyle Ewart Coventry', 'Sisti, Daniel J'),
+        ].join('\n\n')}</textarea>`;
+        const games = parseTournamentPage(html).fullGames[6];
+        expect(games.map(g => [g.white, g.board])).toEqual([
+            ['Walder, Michael', 8],
+            ['Canessa, Kate', 8],
+            ['Booth, Kyle Ewart Coventry', null],
+        ]);
     });
 
     it('handles HTML with no pairings or PGN', () => {
@@ -346,7 +363,6 @@ describe('parseTournamentPage', () => {
         expect(result.hasPairings).toBe(false);
         expect(result.hasResults).toBe(false);
         expect(result.pairingsSections).toEqual([]);
-        expect(result.pgnColors).toEqual({});
         expect(result.fullGames).toEqual({});
         expect(result.strippedHtml).toBe(empty);
     });
