@@ -358,6 +358,9 @@ document.addEventListener('click', (e) => {
         const action = ACTIONS[btn.dataset.action];
         if (!action) return;
         e.preventDefault();
+        // A second finger can land before the first lifts; drop the first
+        // press's timer or it's orphaned and repeats forever.
+        stop();
         action();
         timer = setTimeout(() => {
             timer = setInterval(action, 80);
