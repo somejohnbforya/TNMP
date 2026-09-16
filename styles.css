@@ -342,6 +342,14 @@ html.tnmp {
     font-family: var(--font-mono);
 }
 
+/* No browser zoom: rapid taps on buttons were double-tap-zooming.
+   touch-action doesn't inherit and nested scrollers break the chain,
+   so it goes on every element; :where() keeps specificity at zero so
+   any explicit touch-action (drag handles, the board) still wins. */
+:where(html.tnmp, html.tnmp *) {
+    touch-action: manipulation;
+}
+
 html.tnmp {
     min-height: 100%;
     transition: background var(--transition-slow);
@@ -3335,7 +3343,6 @@ button.viewer-close {
     align-items: center;
     justify-content: center;
     padding: 0.3rem 0.5rem;
-    touch-action: manipulation;
     transition: background var(--transition-fast), color var(--transition-fast);
     padding: 0.35rem;
     flex-shrink: 0;
@@ -3398,7 +3405,6 @@ button.viewer-close {
     display: flex;
     align-items: center;
     justify-content: center;
-    touch-action: manipulation;
     transition: background var(--transition-fast), color var(--transition-fast);
     padding: 0.4rem;
 }

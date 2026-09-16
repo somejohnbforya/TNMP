@@ -340,6 +340,11 @@ const wrappedCheckPairings = async function () {
 // Viewer-modal close paths (X, Escape, backdrop) all route through closeGamePanel()
 // so dirty-state checks happen BEFORE the modal hides. No onModalClose hook needed.
 
+// --- No pinch zoom ---
+// iOS Safari ignores user-scalable=no in the viewport meta; cancelling its
+// proprietary gesture event is the only way to stop pinch-zoom there.
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+
 // --- Keyboard shortcuts in modals ---
 document.addEventListener('keydown', (e) => {
     const settingsModal = document.getElementById('settings-modal');
