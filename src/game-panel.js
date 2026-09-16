@@ -1712,7 +1712,23 @@ export function openGamePanel(opts = {}) {
     if (!playerColor) playerColor = 'White';
     const orientation = playerColor === 'Black' ? 'black' : 'white';
 
-    loadGame(game?.pgn || opts.pgn || '*', orientation);
+    loadGame(game?.pgn || opts.pgn || headersOnlyPgn(game), orientation);
+}
+
+// A game with no moves yet (pairing, or results before PGNs are posted) still
+// has its players on the stored record; give the viewer those as headers so
+// the player bar names them and links to their profiles.
+function headersOnlyPgn(game) {
+    const tag = (key, value) => (value ? `[${key} "${String(value).replace(/["\\]/g, '\\$&')}"]\n` : '');
+    const result = game.result || '*';
+    return (
+        tag('White', game.white) +
+        tag('Black', game.black) +
+        tag('WhiteElo', game.whiteElo) +
+        tag('BlackElo', game.blackElo) +
+        tag('Result', result) +
+        `\n${result}`
+    );
 }
 
 export function closeGamePanel() {
@@ -3329,8 +3345,8 @@ function populatePoolElement(pe, item, activeGameId) {
         pe.el.dataset.gameId = game.gameId || '';
         pe.el.dataset.hasPgn = hasPgn ? '1' : '';
         pe.el.dataset.pairing = isPairing;
-        pe.el.setAttribute('role', hasPgn ? 'button' : 'listitem');
-        pe.el.tabIndex = hasPgn ? 0 : -1;
+        pe.el.setAttribute('role', game.gameId ? 'button' : 'listitem');
+        pe.el.tabIndex = game.gameId ? 0 : -1;
         pe.board.textContent = item.label || game.board || '?';
         pe.whiteName.textContent = game.white;
         pe.whiteElo.textContent = game.whiteElo || '';
@@ -3763,15 +3779,9 @@ function wireBrowserListeners(panelEl) {
             }
 
             const row = e.target.closest('[data-game-id]');
-            if (row) {
-                const gameId = row.dataset.gameId;
-                const hasPgn = row.dataset.hasPgn === '1';
-                if (hasPgn) {
-                    openGameFromBrowser(gameId);
-                } else if (gameId) {
-                    showToast('No moves yet for this game', 'info');
-                }
-            }
+            // Moveless rows (pairings, results awaiting PGNs) open too — the
+            // empty game still links both players to their profiles.
+            if (row?.dataset.gameId) openGameFromBrowser(row.dataset.gameId);
         },
         { signal },
     );

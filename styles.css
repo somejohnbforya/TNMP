@@ -5295,7 +5295,7 @@ input.browser-search-input {
     background: var(--surface);
     border-radius: var(--radius-sm);
 }
-.browser-game-row[data-pairing="true"] { opacity: 0.8; cursor: default; }
+.browser-game-row[data-pairing="true"] { opacity: 0.8; }
 
 /* Unrated elo */
 .browser-elo:empty::before {
