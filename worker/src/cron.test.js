@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveGameIds, assignBoards } from './cron.js';
+import { resolveGameIds, assignBoards, movedPairings } from './cron.js';
 
 const FALL_R2_ERG_ID = '2352688410645319';
 
@@ -94,5 +94,51 @@ describe('assignBoards', () => {
     it('keeps a game already stored with moves on its board', () => {
         const rows = [...regularRows(37), row('canessa|langendorf', 41, { extra: true, hasPgn: true })];
         expect(assignBoards(rows, [pgn('canessa|langendorf', 50, true)]).get('canessa|langendorf')).toBe(41);
+    });
+});
+
+describe('movedPairings', () => {
+    const post = (key, board, rnd = 3) => ({ rnd, board, key });
+    const store = (rows, rnd = 3) => {
+        const placed = new Map([[rnd, new Map()]]);
+        const existing = new Map();
+        for (const [key, board, hasPgn = false] of rows) {
+            placed.get(rnd).set(key, board);
+            existing.set(`${rnd}:${board}`, { hasPgn });
+        }
+        return { placed, existing };
+    };
+
+    // Fall 2026 R3: Monday's pairings had these four on boards 2, 3, 4 and 7;
+    // the results table renumbered them 1-4, and their results never landed.
+    it('moves moveless games to the boards the results table renumbered', () => {
+        const { placed, existing } = store([['bambou|zavgorodniy', 2], ['cawthon|yoo', 3], ['fang|wang', 4], ['parsons|powers', 7], ['stults|zhao', 5]]);
+        const posted = [post('bambou|zavgorodniy', 1), post('cawthon|yoo', 2), post('fang|wang', 3), post('parsons|powers', 4), post('stults|zhao', 5)];
+        expect(movedPairings(posted, placed, existing)).toEqual([
+            { rnd: 3, key: 'bambou|zavgorodniy', from: 2, to: 1 },
+            { rnd: 3, key: 'cawthon|yoo', from: 3, to: 2 },
+            { rnd: 3, key: 'fang|wang', from: 4, to: 3 },
+            { rnd: 3, key: 'parsons|powers', from: 7, to: 4 },
+        ]);
+    });
+
+    it('moves both games that trade boards', () => {
+        const { placed, existing } = store([['a|b', 1], ['c|d', 2]]);
+        expect(movedPairings([post('a|b', 2), post('c|d', 1)], placed, existing)).toHaveLength(2);
+    });
+
+    it('leaves a game placed by its PGN on its board', () => {
+        const { placed, existing } = store([['a|b', 9, true]]);
+        expect(movedPairings([post('a|b', 2)], placed, existing)).toEqual([]);
+    });
+
+    it('moves a game once when MI lists its section twice', () => {
+        const { placed, existing } = store([['a|b', 2]]);
+        expect(movedPairings([post('a|b', 1), post('a|b', 1)], placed, existing)).toEqual([{ rnd: 3, key: 'a|b', from: 2, to: 1 }]);
+    });
+
+    it('ignores a pairing with no stored game', () => {
+        const { placed, existing } = store([]);
+        expect(movedPairings([post('a|b', 1)], placed, existing)).toEqual([]);
     });
 });

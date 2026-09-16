@@ -523,6 +523,13 @@ async function runCronLogic(env) {
     if (parsed.hasPairings) {
         try {
             const shellStmts = [];
+            for (const { rnd, from, to, key } of movedPairings(posted, placed, existingMap)) {
+                shellStmts.push(env.DB.prepare(
+                    `DELETE FROM games WHERE tournament_slug = ? AND round = ? AND board = ? AND (pgn IS NULL OR pgn = '')`
+                ).bind(slug, rnd, from));
+                existingMap.delete(`${rnd}:${from}`);
+                place(rnd, key, to);
+            }
             for (const { rnd, board, section, row, wInfo, bInfo, wc, bc, key } of posted) {
                 const ex = existingMap.get(`${rnd}:${board}`);
                 const result = parseGameResult(row.whiteResult, row.blackResult);
@@ -611,6 +618,26 @@ async function runCronLogic(env) {
 
     const total = Object.values(t).reduce((s, v) => s + v, 0);
     console.log(`[TIMING] ${Object.entries(t).map(([k, v]) => `${k}=${v.toFixed(1)}ms`).join(' | ')} | total=${total.toFixed(1)}ms`);
+}
+
+// The moveless games the posted pairings move to another board, as
+// { rnd, key, from, to }. MI can renumber boards when it posts results (Fall
+// 2026 R3: Monday's boards 2, 3, 4 and 7 became 1-4, and the results skipped
+// them because each pair already sat on another board), and
+// a pairings row is less trusted than the results table, so a game stored
+// without moves follows its pair to the posted board. A game placed by its PGN
+// keeps its board. Every move is returned before any write, so games trading
+// boards clear both before either is rewritten.
+// posted: { rnd, board, key }; placed: round → pair key → board;
+// existing: `round:board` → { hasPgn }
+export function movedPairings(posted, placed, existing) {
+    const moves = new Map();
+    for (const { rnd, board, key } of posted) {
+        const at = placed.get(rnd)?.get(key);
+        if (at == null || at === board || existing.get(`${rnd}:${at}`)?.hasPgn) continue;
+        moves.set(`${rnd}:${key}`, { rnd, key, from: at, to: board });
+    }
+    return [...moves.values()];
 }
 
 // The board each PGN in a round goes on. MI's sources arrive in trust order:
