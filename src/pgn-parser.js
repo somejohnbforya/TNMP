@@ -497,7 +497,7 @@ function serializeHeaders(record) {
  * NAGs ($1) for their symbol forms (!) in tree serialization.
  */
 export function serializePgn(record, opts = {}) {
-    const { moves, tree, readable = false } = opts;
+    const { moves, tree, readable = false, comments = true, variations = true } = opts;
     const resultToken = opts.result || record.result || '*';
 
     const lines = serializeHeaders(record);
@@ -506,7 +506,7 @@ export function serializePgn(record, opts = {}) {
     if (moves) {
         movetext = serializeMovesArray(moves, 1, true);
     } else if (tree) {
-        movetext = serializeTree(tree, { readable });
+        movetext = serializeTree(tree, { readable, comments, variations });
     }
 
     const fullText = movetext ? movetext + ' ' + resultToken : resultToken;
@@ -557,7 +557,7 @@ function serializeMovesArray(moves, moveNum, whiteToMove) {
  * Handles variations via sibling enumeration, skips deleted nodes, and
  * (when readable) replaces numeric NAGs with symbol forms.
  */
-function serializeTree(nodes, { readable = false } = {}) {
+function serializeTree(nodes, { readable = false, comments = true, variations = true } = {}) {
     if (!nodes?.length || nodes[0].mainChild === null) return '';
 
     function walkLine(startId, isVariationStart) {
@@ -583,7 +583,7 @@ function serializeTree(nodes, { readable = false } = {}) {
                 for (const nag of node.nags) parts.push(`$${nag}`);
             }
 
-            if (node.comment || (!readable && node.annotations)) {
+            if (comments && (node.comment || (!readable && node.annotations))) {
                 const annStr = readable ? '' : serializeAnnotations(node.annotations);
                 const text = node.comment && annStr ? `${node.comment} ${annStr}` : node.comment || annStr;
                 if (text) {
@@ -593,7 +593,7 @@ function serializeTree(nodes, { readable = false } = {}) {
             }
 
             const parent = nodes[node.parentId];
-            if (!skipSiblings && parent && parent.children.length > 1) {
+            if (variations && !skipSiblings && parent && parent.children.length > 1) {
                 for (const altId of parent.children) {
                     if (altId !== id && !nodes[altId].deleted) {
                         parts.push(`(${walkLine(altId, true).join(' ')})`);

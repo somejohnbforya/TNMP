@@ -344,8 +344,15 @@ export function createGame(pgnText, { onPositionChange, onChange } = {}) {
             return serializePgn(record, { tree: nodes });
         },
 
+        // What Copy PGN hands over, so it matches the move list: the comments
+        // toggle hides comments and variations there, and hides them here too.
         getReadablePgn() {
-            return serializePgn(record, { tree: nodes, readable: true });
+            return serializePgn(record, {
+                tree: nodes,
+                readable: true,
+                comments: !commentsHidden,
+                variations: !commentsHidden,
+            });
         },
 
         getCurrentFen() {
