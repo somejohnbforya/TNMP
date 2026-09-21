@@ -1757,9 +1757,18 @@ function snapBoardSize(tab) {
     const quantum = 8 / (window.devicePixelRatio || 1);
     const snap = () => {
         col.style.height = '';
+        col.style.transform = '';
         requestAnimationFrame(() => {
             const h = col.getBoundingClientRect().height;
             col.style.height = Math.floor(h / quantum) * quantum + 'px';
+            // chessground sizes each square to a whole number of device pixels,
+            // but flex centring lands the board itself on a fraction of one
+            // (measured: 387.375). Every piece then straddles a device pixel and
+            // the browser resamples it — the grainy look. Nudge it back on grid.
+            const dpr = window.devicePixelRatio || 1;
+            const rect = col.getBoundingClientRect();
+            const nudge = (v) => -(((v * dpr) % 1) / dpr);
+            col.style.transform = `translate(${nudge(rect.left)}px, ${nudge(rect.top)}px)`;
         });
     };
     const ro = new ResizeObserver(snap);
