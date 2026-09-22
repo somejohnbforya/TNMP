@@ -23,7 +23,7 @@ self.onmessage = async (e) => {
 
     if (cmd === 'init') {
         try {
-            const jsFile = e.data.variant === 'lite' ? 'sf_18_smallnet.js' : 'sf_18.js';
+            const jsFile = e.data.variant === 'lite' ? 'sf_19_smallnet.js' : 'sf_19.js';
             const engineUrl = new URL(`/engine/${jsFile}`, e.data.engineOrigin).href;
             const mod = await import(/* @vite-ignore */ engineUrl);
             _sf = await mod.default();

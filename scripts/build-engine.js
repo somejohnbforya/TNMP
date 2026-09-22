@@ -1,5 +1,6 @@
-// Copy Stockfish engine files from @lichess-org/stockfish-web to public/engine/
-// and download NNUE network files if not already present.
+// Copy Stockfish engine files from @lichess-org/stockfish-web to public/engine/.
+// NNUE weights aren't copied: the browser fetches them at runtime through the
+// worker's /nnue/ proxy and keeps them in the Cache API (see src/engine.js).
 import { cpSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -10,10 +11,11 @@ const dest = join(root, 'public', 'engine');
 
 mkdirSync(dest, { recursive: true });
 
-// Copy both engine builds (NNUE weights fetched at runtime via worker proxy)
-// sf_18: full strength, needs big + small NNUE nets (~104MB + ~3.4MB)
-// sf_18_smallnet: lite, needs only one small net (~3.4MB)
-const files = ['sf_18.js', 'sf_18.wasm', 'sf_18_smallnet.js', 'sf_18_smallnet.wasm'];
+// Net sizes as the browser downloads them: the proxy's upstream fetch undoes
+// the CDN's compression, so the 75 MiB full net arrives as 94 MiB.
+// sf_19: full strength, one net (nn-1a298aa575a0, 94 MiB)
+// sf_19_smallnet: lite, one net (nn-61e7af4bb97d, 1.1 MiB)
+const files = ['sf_19.js', 'sf_19.wasm', 'sf_19_smallnet.js', 'sf_19_smallnet.wasm'];
 for (const file of files) {
     cpSync(join(src, file), join(dest, file));
 }

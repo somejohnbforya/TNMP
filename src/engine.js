@@ -57,7 +57,11 @@ export function getSavedVariant() {
 
 // ─── Init / Destroy ──────────────────────────────────────────────
 
-const NNUE_CACHE = 'tnmp-nnue-v1';
+// Nothing evicts from this cache on its own, so an engine upgrade that changes
+// nets moves to a new name and deletes the old one, or every returning user
+// keeps the previous nets forever. v1 held Stockfish 18's (~107 MB).
+const NNUE_CACHE = 'tnmp-nnue-v2';
+const RETIRED_NNUE_CACHES = ['tnmp-nnue-v1'];
 
 export async function initEngine(variant, options = {}) {
     if (_worker) destroyEngine();
@@ -141,6 +145,7 @@ let _initResolve = null;
 async function _loadNnue(variant) {
     if (!_worker) return;
     const indices = variant === 'lite' ? [0] : [0, 1];
+    await Promise.all(RETIRED_NNUE_CACHES.map((name) => caches.delete(name)));
     const cache = await caches.open(NNUE_CACHE);
 
     for (const index of indices) {

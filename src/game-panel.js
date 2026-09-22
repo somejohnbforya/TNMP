@@ -186,7 +186,7 @@ function buildTabDOM() {
                         <div class="engine-panel-header">
                             <div class="engine-panel-title">
                                 <button data-action="engine-pause" class="engine-pause-btn" aria-label="Pause/resume analysis" data-tooltip="Pause/Resume">${icon('play', 14)}</button>
-                                <span class="engine-name">Stockfish 18</span>
+                                <span class="engine-name">Stockfish 19</span>
                                 <span class="engine-variant-badge"></span>
                                 <span class="engine-nps"></span>
                             </div>
@@ -883,11 +883,11 @@ export function initGamePanel(mount, { features, pieceSrc } = {}) {
                     <div class="engine-choices">
                         <label class="engine-choice">
                             <input type="radio" name="engine-variant" value="lite" checked>
-                            <span class="engine-choice-label">Lite Engine<small>~15 MB download, good for casual analysis</small></span>
+                            <span class="engine-choice-label">Lite Engine<small>~2 MB download, good for casual analysis</small></span>
                         </label>
                         <label class="engine-choice">
                             <input type="radio" name="engine-variant" value="full">
-                            <span class="engine-choice-label">Full Engine<small>~108 MB download, maximum strength</small></span>
+                            <span class="engine-choice-label">Full Engine<small>~95 MB download, maximum strength</small></span>
                         </label>
                     </div>
                     <div class="editor-import-actions">
@@ -903,8 +903,8 @@ export function initGamePanel(mount, { features, pieceSrc } = {}) {
                         <label class="engine-setting">
                             <span class="engine-setting-name">Engine</span>
                             <select id="engine-setting-variant" class="engine-setting-select">
-                                <option value="lite">Lite (~15 MB)</option>
-                                <option value="full">Full (~108 MB)</option>
+                                <option value="lite">Lite (~2 MB)</option>
+                                <option value="full">Full (~95 MB)</option>
                             </select>
                         </label>
                         <label class="engine-setting">
