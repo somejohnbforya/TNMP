@@ -9,12 +9,14 @@ async function sha256Hex(input) {
     return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function legacyKey(endpoint) {
-    return `push:${await sha256Hex(endpoint)}`;
-}
-
 function deviceKey(deviceId) {
     return `device:${deviceId}`;
+}
+
+// A client old enough to send no deviceId is keyed by a hash of its endpoint,
+// under the same prefix — one prefix means one list operation per scan.
+async function endpointKey(endpoint) {
+    return deviceKey(await sha256Hex(endpoint));
 }
 
 async function putRecord(env, key, record) {
@@ -33,23 +35,17 @@ export async function handlePushSubscribe(request, env) {
         return corsResponse({ success: false, error: 'Unsupported push endpoint' }, 400, env, request);
     }
 
-    const key = deviceId ? deviceKey(deviceId) : await legacyKey(subscription.endpoint);
+    const key = deviceId ? deviceKey(deviceId) : await endpointKey(subscription.endpoint);
     const existing = await env.SUBSCRIBERS.get(key, 'json');
 
+    // An endpoint-keyed record is orphaned when the push service rotates the
+    // endpoint. Guarded by a read: an unconditional delete spends a delete
+    // operation every subscribe to remove a key that is almost never there.
     if (!deviceId && oldEndpoint && oldEndpoint !== subscription.endpoint) {
-        const oldKey = await legacyKey(oldEndpoint);
+        const oldKey = await endpointKey(oldEndpoint);
         if (await env.SUBSCRIBERS.get(oldKey)) {
             console.log(`Cleaning up rotated push endpoint: ${oldKey}`);
             await env.SUBSCRIBERS.delete(oldKey);
-        }
-    }
-
-    if (deviceId) {
-        const legacyK = await legacyKey(subscription.endpoint);
-        try { await env.SUBSCRIBERS.delete(legacyK); } catch { /* ignore */ }
-        if (oldEndpoint && oldEndpoint !== subscription.endpoint) {
-            const oldLegacyK = await legacyKey(oldEndpoint);
-            try { await env.SUBSCRIBERS.delete(oldLegacyK); } catch { /* ignore */ }
         }
     }
 
@@ -83,8 +79,7 @@ export async function handlePushUnsubscribe(request, env) {
         return corsResponse({ success: false, error: 'Endpoint or deviceId is required' }, 400, env, request);
     }
 
-    if (deviceId) await env.SUBSCRIBERS.delete(deviceKey(deviceId));
-    if (endpoint) await env.SUBSCRIBERS.delete(await legacyKey(endpoint));
+    await env.SUBSCRIBERS.delete(deviceId ? deviceKey(deviceId) : await endpointKey(endpoint));
 
     return corsResponse({ success: true }, 200, env, request);
 }
@@ -96,7 +91,7 @@ export async function handlePushStatus(request, env) {
 
     let record = null;
     if (deviceId) record = await env.SUBSCRIBERS.get(deviceKey(deviceId), 'json');
-    if (!record && endpoint) record = await env.SUBSCRIBERS.get(await legacyKey(endpoint), 'json');
+    if (!record && endpoint) record = await env.SUBSCRIBERS.get(await endpointKey(endpoint), 'json');
 
     if (!record) {
         return corsResponse({ subscribed: false }, 200, env, request);
@@ -123,7 +118,7 @@ export async function handlePushPreferences(request, env) {
         record = await env.SUBSCRIBERS.get(key, 'json');
     }
     if (!record && endpoint) {
-        key = await legacyKey(endpoint);
+        key = await endpointKey(endpoint);
         record = await env.SUBSCRIBERS.get(key, 'json');
     }
 
@@ -229,18 +224,16 @@ export async function handlePushTest(request, env) {
 
 export async function listPushSubscriptions(env) {
     const subs = [];
+    let cursor = undefined;
 
-    for (const prefix of ['device:', 'push:']) {
-        let cursor = undefined;
-        do {
-            const list = await env.SUBSCRIBERS.list({ prefix, cursor });
-            const records = await Promise.all(
-                list.keys.map(k => env.SUBSCRIBERS.get(k.name, 'json').then(r => ({ key: k.name, record: r })))
-            );
-            subs.push(...records);
-            cursor = list.list_complete ? undefined : list.cursor;
-        } while (cursor);
-    }
+    do {
+        const list = await env.SUBSCRIBERS.list({ prefix: 'device:', cursor });
+        const records = await Promise.all(
+            list.keys.map(k => env.SUBSCRIBERS.get(k.name, 'json').then(r => ({ key: k.name, record: r })))
+        );
+        subs.push(...records);
+        cursor = list.list_complete ? undefined : list.cursor;
+    } while (cursor);
 
     return subs;
 }
@@ -250,28 +243,11 @@ export async function dispatchPushNotifications({ subscribers, prefKey, marks, b
 
     // Per-subscriber dedup: skip only when ALL marks are already-notified.
     // If any mark is missing, dispatch (the user is owed at least one signal).
-    // Backward-compat: a legacy-field match counts as already-notified for the
-    // signal it covers, and we migrate it to the new composite field on hit.
-    const isMarked = (record, m) =>
-        record[m.trackKey] === m.trackValue ||
-        (m.legacyKey && m.legacyValue !== undefined && record[m.legacyKey] === m.legacyValue);
+    const isMarked = (record, m) => record[m.trackKey] === m.trackValue;
 
     for (const { key, record } of subscribers) {
         if (!record || record[prefKey] === false) continue;
-        const allMarked = marks.every(m => isMarked(record, m));
-        if (allMarked) {
-            // Migrate any legacy-only matches to new composite fields, then skip.
-            let migrated = false;
-            for (const m of marks) {
-                if (m.legacyKey && record[m.legacyKey] === m.legacyValue && record[m.trackKey] !== m.trackValue) {
-                    record[m.trackKey] = m.trackValue;
-                    delete record[m.legacyKey];
-                    migrated = true;
-                }
-            }
-            if (migrated) await putRecord(env, key, record);
-            continue;
-        }
+        if (marks.every(m => isMarked(record, m))) continue;
         if (shouldNotify && !shouldNotify(record)) { skipped++; continue; }
 
         const payloadObj = await buildPayload(record);
@@ -285,10 +261,7 @@ export async function dispatchPushNotifications({ subscribers, prefKey, marks, b
         );
 
         if (result.success) {
-            for (const m of marks) {
-                record[m.trackKey] = m.trackValue;
-                if (m.legacyKey) delete record[m.legacyKey];
-            }
+            for (const m of marks) record[m.trackKey] = m.trackValue;
             record.lastDeliveredAt = new Date().toISOString();
             record.failCount = 0;
             record.retryAfter = null;

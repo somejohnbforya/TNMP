@@ -771,7 +771,6 @@ export const KIND_CONSUMES = {
 
 const STATE_KEY = { pairings: 'state:pairingsUp', results: 'state:resultsPosted', games: 'state:gamesPosted' };
 const TRACK_KEY = { pairings: 'lastNotifiedPairings', results: 'lastNotifiedResults', games: 'lastNotifiedGames' };
-const LEGACY_TRACK_KEY = { pairings: 'lastNotifiedRound', results: 'lastNotifiedResultsRound', games: 'lastNotifiedGamesRound' };
 const SIGNAL_LETTER = { pairings: 'p', results: 'r', games: 'g' };
 
 async function dispatchAllNotifications(parsed, tournament, env) {
@@ -784,10 +783,7 @@ async function dispatchAllNotifications(parsed, tournament, env) {
     const totalRounds = tournament.totalRounds || 0;
     const isFinalRound = totalRounds > 0 && round === totalRounds;
 
-    // Legacy KV state had only {round} — treat a round-only match as same-
-    // tournament for backward compat, so we don't re-fire on first post-deploy
-    // cron tick (and don't lose suppression of yesterday's spurious dispatches).
-    const stateMatches = (s) => s && s.round === round && (!s.tournamentSlug || s.tournamentSlug === slug);
+    const stateMatches = (s) => s && s.round === round && s.tournamentSlug === slug;
 
     const [pairingsState, resultsState, gamesState] = await Promise.all([
         env.SUBSCRIBERS.get('state:pairingsUp', 'json'),
@@ -820,8 +816,6 @@ async function dispatchAllNotifications(parsed, tournament, env) {
     const marks = consumed.map(sig => ({
         trackKey: TRACK_KEY[sig],
         trackValue: `${slug}:${SIGNAL_LETTER[sig]}:${round}`,
-        legacyKey: LEGACY_TRACK_KEY[sig],
-        legacyValue: round,
     }));
 
     const spec = buildNotificationSpec(kind, { round, tournament, parsed });
