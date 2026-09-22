@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
-import { handleTournaments, recountPgnGames } from './games.js';
+import { handleTournaments, recountPgnGames, resolvePlayerNorm } from './games.js';
 
 const MIGRATIONS = new URL('../migrations/', import.meta.url);
 const migrationFiles = fs.readdirSync(MIGRATIONS).filter(f => f.endsWith('.sql')).sort();
@@ -166,3 +166,50 @@ describe('handleTournaments', () => {
     });
 });
 
+describe('resolvePlayerNorm', () => {
+    function players() {
+        const h = d1();
+        const add = (name, norm, aliases = []) => h.db
+            .prepare('INSERT INTO players (name, name_norm, aliases) VALUES (?, ?, ?)')
+            .run(name, norm, JSON.stringify(aliases));
+        add('Smith, James', 'james smith', ['jim smith']);
+        add('Lee, Ann', 'ann lee');
+        return h;
+    }
+
+    it('returns a canonical norm as-is', async () => {
+        const { env } = players();
+        expect(await resolvePlayerNorm('james smith', env)).toBe('james smith');
+    });
+
+    // The client sends canonical names, so this is nearly every call. The OR'd
+    // alias test used to force a scan of every player; now the unique index
+    // answers and the alias scan never runs.
+    it('answers a canonical norm from the index, without the alias scan', async () => {
+        const { db, env, prepared } = players();
+        await resolvePlayerNorm('james smith', env);
+
+        expect(prepared).toHaveLength(1);
+        const steps = plan(db, prepared[0]);
+        expect(steps.some(s => /SEARCH players USING (COVERING )?INDEX/.test(s))).toBe(true);
+        expect(steps.some(s => /^SCAN players/.test(s))).toBe(false);
+    });
+
+    it('resolves an alias to its canonical norm', async () => {
+        const { env } = players();
+        expect(await resolvePlayerNorm('jim smith', env)).toBe('james smith');
+    });
+
+    it('returns an unknown norm unchanged', async () => {
+        const { env } = players();
+        expect(await resolvePlayerNorm('nobody here', env)).toBe('nobody here');
+    });
+
+    // The single OR'd query returned whichever row SQLite reached first.
+    it('prefers the player whose own name matches over one listing it as an alias', async () => {
+        const { db, env } = players();
+        db.prepare('INSERT INTO players (name, name_norm, aliases) VALUES (?, ?, ?)')
+            .run('Lee, Annie', 'annie lee', JSON.stringify(['ann lee']));
+        expect(await resolvePlayerNorm('ann lee', env)).toBe('ann lee');
+    });
+});

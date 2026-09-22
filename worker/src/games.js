@@ -13,14 +13,20 @@ import { generateBoardSvg } from './og-board.js';
 /**
  * Resolve a normalized player name to its canonical norm via alias lookup.
  * Returns the canonical norm if found, otherwise returns the input unchanged.
+ *
+ * Two lookups, not one: `name_norm = ? OR EXISTS (json_each(aliases))` can't
+ * use the unique index on name_norm, so it scanned every player (~3K rows) on
+ * every call. The client sends canonical names, so the indexed lookup almost
+ * always answers; only an alias pays for the scan.
  */
-async function resolvePlayerNorm(norm, env) {
+export async function resolvePlayerNorm(norm, env) {
     try {
-        // Check if this norm is a known alias
-        const row = await env.DB.prepare(
-            "SELECT name_norm FROM players WHERE name_norm = ? OR EXISTS (SELECT 1 FROM json_each(aliases) WHERE value = ?)"
-        ).bind(norm, norm).first();
-        if (row) return row.name_norm;
+        const canonical = await env.DB.prepare('SELECT name_norm FROM players WHERE name_norm = ?').bind(norm).first();
+        if (canonical) return canonical.name_norm;
+        const alias = await env.DB.prepare(
+            'SELECT name_norm FROM players WHERE EXISTS (SELECT 1 FROM json_each(aliases) WHERE value = ?) LIMIT 1'
+        ).bind(norm).first();
+        if (alias) return alias.name_norm;
     } catch { /* players table may not exist yet */ }
     return norm;
 }
