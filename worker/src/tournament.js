@@ -1,4 +1,4 @@
-import { corsResponse, slugifyTournament, pacificDatetime, pacificNow, TOURNAMENTS_LIST_URL, MI_BASE_URL } from './helpers.js';
+import { corsResponse, slugifyTournament, pacificDatetime, pacificNow, TOURNAMENTS_LIST_URL, MI_BASE_URL, cronStub } from './helpers.js';
 import { hasPairings, hasResults, parseRoundDates, extractTournamentName, parseTournamentList, parseStandings } from './parser.js';
 
 // Falls back to MI listing page discovery during ~7-day gaps between tournaments
@@ -415,20 +415,27 @@ export async function handleOgState(request, env) {
     }, 200, env, request);
 }
 
+// The cron's heartbeat lives in the Durable Object's storage, not KV — a
+// per-minute write of a fresh timestamp would eat the KV free tier on its own.
+async function readLastCheck(env) {
+    try {
+        const res = await cronStub(env).fetch('https://do/last-check');
+        return res.ok ? await res.json() : null;
+    } catch (err) {
+        console.warn('Could not read cron heartbeat:', err.message);
+        return null;
+    }
+}
+
 export async function handleHealth(env, request) {
-    const [lastCheck, pairingsState, resultsState, gamesState, cached] = await Promise.all([
-        env.SUBSCRIBERS.get('state:lastCheck'),
+    const [lastCheckData, pairingsState, resultsState, gamesState, cached] = await Promise.all([
+        readLastCheck(env),
         env.SUBSCRIBERS.get('state:pairingsUp', 'json'),
         env.SUBSCRIBERS.get('state:resultsPosted', 'json'),
         env.SUBSCRIBERS.get('state:gamesPosted', 'json'),
         env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
     ]);
 
-    let lastCheckData = null;
-    if (lastCheck) {
-        try { lastCheckData = JSON.parse(lastCheck); }
-        catch { console.warn('Corrupt state:lastCheck in KV, ignoring'); }
-    }
     const lastCheckTime = lastCheckData?.timestamp ? new Date(lastCheckData.timestamp).getTime() : null;
 
     return corsResponse({

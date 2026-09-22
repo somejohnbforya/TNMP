@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection, isExtraRated, pacificNow, extractRatingFloor, floorFromPeak } from './helpers.js';
+import { slugifyTournament, normalizePlayerName, titleCaseName, normalizeSection, isExtraRated, pacificNow, extractRatingFloor, floorFromPeak, cronStub } from './helpers.js';
 import { resolveTournament, computeAppState, discoverUpcomingTournaments } from './tournament.js';
 import { listPushSubscriptions, dispatchPushNotifications, retryPendingNotifications } from './push.js';
 import {
@@ -11,8 +11,14 @@ import {
 import { classifyOpening } from './eco.js';
 
 export class TournamentCron extends DurableObject {
-    async fetch() {
-        await runCronLogic(this.env);
+    async fetch(request) {
+        // Cron-internal state (the heartbeat, retry bookkeeping) lives in the
+        // DO's own storage rather than KV, so a per-minute tick costs nothing
+        // against KV's 1,000-writes-a-day free tier. /health reads it back.
+        if (new URL(request.url).pathname === '/last-check') {
+            return Response.json((await this.ctx.storage.get('lastCheck')) ?? null);
+        }
+        await runCronLogic(this.env, this.ctx.storage);
         return new Response('ok');
     }
 }
@@ -30,22 +36,58 @@ export async function handleScheduled(env, { force = false } = {}) {
         }
     }
 
-    const id = env.TOURNAMENT_CRON.idFromName('singleton');
-    const stub = env.TOURNAMENT_CRON.get(id);
-    const res = await stub.fetch('https://do/run');
+    const res = await cronStub(env).fetch('https://do/run');
     if (!res.ok) {
         const text = await res.text();
         throw new Error(`TournamentCron DO failed (${res.status}): ${text}`);
     }
 }
 
-async function updateLastCheck(env, { pairingsFound = false, error = null } = {}) {
+// A fresh timestamp every tick is genuinely new information, so there is
+// nothing to dedupe — it just does not belong in a store that bills writes.
+async function updateLastCheck(storage, { pairingsFound = false, error = null } = {}) {
     const data = { timestamp: new Date().toISOString(), pairingsFound };
     if (error) data.error = error;
-    await env.SUBSCRIBERS.put('state:lastCheck', JSON.stringify(data));
+    await storage.put('lastCheck', data);
 }
 
-async function runCronLogic(env) {
+const APP_STATE_FIELDS = ['state', 'round', 'tournamentName', 'tournamentUrl', 'tournamentSlug', 'roundDates'];
+
+// App state is time-dependent, so it can move while MI's page stands still —
+// but only at a phase boundary, not on every tick. fetchedAt is deliberately
+// outside the comparison: it changes every tick and would defeat the guard
+// entirely, and nothing reads it from this key (handleTournamentState falls
+// back to recomputing when the key is absent).
+export async function putAppStateIfChanged(env, appState) {
+    const next = Object.fromEntries(APP_STATE_FIELDS.map(f => [f, appState[f] ?? null]));
+    const stored = await env.SUBSCRIBERS.get('cache:appState', 'json');
+    const same = stored && APP_STATE_FIELDS.every(
+        f => JSON.stringify(stored[f] ?? null) === JSON.stringify(next[f]));
+    if (same) return false;
+
+    await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({ ...next, fetchedAt: new Date().toISOString() }));
+    console.log(`Cached appState in KV (${stored ? `${stored.state} r${stored.round} -> ` : 'first write, '}${next.state} r${next.round}).`);
+    return true;
+}
+
+// Scanning for pending retries costs a list plus a read per subscriber, and
+// the cron ticks every minute on pairings night — so it runs only when a
+// dispatch left something pending. The hourly floor is the self-healing half:
+// if the flag is ever lost, a stranded retry waits an hour, not forever.
+const RETRY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
+export async function sweepPendingRetries(env, storage) {
+    const [pending, lastSweep] = await Promise.all([
+        storage.get('pendingRetries'),
+        storage.get('lastRetrySweep'),
+    ]);
+    if (!pending && Date.now() - (lastSweep || 0) < RETRY_SWEEP_INTERVAL_MS) return;
+
+    const { remaining } = await retryPendingNotifications(env);
+    await storage.put({ pendingRetries: remaining > 0, lastRetrySweep: Date.now() });
+}
+
+async function runCronLogic(env, storage) {
     console.log('Cron triggered: checking for pairings...');
     const t = {};
     let t0;
@@ -64,7 +106,7 @@ async function runCronLogic(env) {
     t.resolveTournament = performance.now() - t0;
     if (!tournament) {
         console.error('Could not resolve tournament');
-        await updateLastCheck(env, { error: 'Could not resolve tournament' });
+        await updateLastCheck(storage, { error: 'Could not resolve tournament' });
         return;
     }
 
@@ -78,13 +120,13 @@ async function runCronLogic(env) {
         });
         if (!response.ok) {
             console.error(`Failed to fetch tournament page: HTTP ${response.status}`);
-            await updateLastCheck(env, { error: `MI page HTTP ${response.status}` });
+            await updateLastCheck(storage, { error: `MI page HTTP ${response.status}` });
             return;
         }
         html = await response.text();
     } catch (err) {
         console.error('Fetch error:', err.message);
-        await updateLastCheck(env, { error: `Fetch error: ${err.message}` });
+        await updateLastCheck(storage, { error: `Fetch error: ${err.message}` });
         return;
     }
     t.fetchHtml = performance.now() - t0;
@@ -92,25 +134,19 @@ async function runCronLogic(env) {
     t0 = performance.now();
     const hashBuffer = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(html));
     const hash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-    const storedHash = await env.SUBSCRIBERS.get('cache:htmlHash');
+    // The hash rides inside the cached record, so one read answers both "has
+    // the page changed" and "what did it say last time".
+    const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
     t.hashCheck = performance.now() - t0;
-    if (hash === storedHash) {
+    if (cached?.hash && cached.hash === hash) {
         console.log('HTML unchanged, skipping HTML processing.');
-        const cached = await env.SUBSCRIBERS.get('cache:tournamentHtml', 'json');
-        const parsed = cached?.html ? parseTournamentPage(cached.html) : null;
+        const parsed = cached.html ? parseTournamentPage(cached.html) : null;
         const hasPairingsFlag = !!parsed?.hasPairings;
-        await dispatchAllNotifications(parsed, tournament, env);
-        await retryPendingNotifications(env);
+        await dispatchAllNotifications(parsed, tournament, env, storage);
+        await sweepPendingRetries(env, storage);
 
-        // Recompute time-dependent app state even when HTML hasn't changed
-        const appState = computeAppState(cached, tournament);
-        await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
-            state: appState.state, round: appState.round,
-            tournamentName: appState.tournamentName, tournamentUrl: appState.tournamentUrl,
-            tournamentSlug: appState.tournamentSlug, roundDates: appState.roundDates,
-            fetchedAt: new Date().toISOString(),
-        }));
-        await updateLastCheck(env, { pairingsFound: hasPairingsFlag });
+        await putAppStateIfChanged(env, computeAppState(cached, tournament));
+        await updateLastCheck(storage, { pairingsFound: hasPairingsFlag });
         return;
     }
     console.log('HTML changed, processing...');
@@ -260,28 +296,13 @@ async function runCronLogic(env) {
     }
 
     t0 = performance.now();
-    await env.SUBSCRIBERS.put('cache:tournamentHtml', JSON.stringify({
-        html: parsed.strippedHtml,
-        fetchedAt: new Date().toISOString(),
-        round: parsed.roundNumber,
-    }));
-    console.log(`Cached tournament HTML in KV (${parsed.strippedHtml.length} chars, stripped from ${html.length}).`);
-    t.kvPutHtml = performance.now() - t0;
-
-    t0 = performance.now();
-    const cached = { html: parsed.strippedHtml, round: parsed.roundNumber };
-    const appState = computeAppState(cached, tournament);
+    const fresh = { html: parsed.strippedHtml, round: parsed.roundNumber };
+    const appState = computeAppState(fresh, tournament);
     t.computeAppState = performance.now() - t0;
     const slug = tournament.slug || slugifyTournament(tournament.name);
 
     t0 = performance.now();
-    await env.SUBSCRIBERS.put('cache:appState', JSON.stringify({
-        state: appState.state, round: appState.round,
-        tournamentName: appState.tournamentName, tournamentUrl: appState.tournamentUrl,
-        tournamentSlug: appState.tournamentSlug, roundDates: appState.roundDates,
-        fetchedAt: new Date().toISOString(),
-    }));
-    console.log(`Cached appState in KV.`);
+    await putAppStateIfChanged(env, appState);
     t.kvPutAppState = performance.now() - t0;
 
     // Byes and forfeit cleanup read standings round columns as TNM rounds, and
@@ -605,15 +626,26 @@ async function runCronLogic(env) {
         }
     }
 
-    if (writeErrors.length === 0) await env.SUBSCRIBERS.put('cache:htmlHash', hash);
-    await updateLastCheck(env, { pairingsFound: parsed.hasPairings, error: writeErrors.join('; ') || null });
+    // One write commits the page and the hash that marks it processed. The
+    // hash is withheld when any write failed, so the next tick reprocesses
+    // rather than waiting for MI to edit the page again.
+    t0 = performance.now();
+    await env.SUBSCRIBERS.put('cache:tournamentHtml', JSON.stringify({
+        ...fresh,
+        fetchedAt: new Date().toISOString(),
+        hash: writeErrors.length === 0 ? hash : null,
+    }));
+    console.log(`Cached tournament HTML in KV (${parsed.strippedHtml.length} chars, stripped from ${html.length})${writeErrors.length ? ' — hash withheld, will reprocess' : ''}.`);
+    t.kvPutHtml = performance.now() - t0;
+
+    await updateLastCheck(storage, { pairingsFound: parsed.hasPairings, error: writeErrors.join('; ') || null });
 
     t0 = performance.now();
-    await dispatchAllNotifications(parsed, tournament, env);
+    await dispatchAllNotifications(parsed, tournament, env, storage);
     t.notifications = performance.now() - t0;
 
     t0 = performance.now();
-    await retryPendingNotifications(env);
+    await sweepPendingRetries(env, storage);
     t.retryNotifications = performance.now() - t0;
 
     const total = Object.values(t).reduce((s, v) => s + v, 0);
@@ -773,7 +805,7 @@ const STATE_KEY = { pairings: 'state:pairingsUp', results: 'state:resultsPosted'
 const TRACK_KEY = { pairings: 'lastNotifiedPairings', results: 'lastNotifiedResults', games: 'lastNotifiedGames' };
 const SIGNAL_LETTER = { pairings: 'p', results: 'r', games: 'g' };
 
-async function dispatchAllNotifications(parsed, tournament, env) {
+async function dispatchAllNotifications(parsed, tournament, env, storage) {
     const slug = tournament.slug || slugifyTournament(tournament.name);
     const round = parsed?.roundNumber || (await env.SUBSCRIBERS.get('cache:appState', 'json'))?.round;
     if (!round) {
@@ -821,7 +853,7 @@ async function dispatchAllNotifications(parsed, tournament, env) {
     const spec = buildNotificationSpec(kind, { round, tournament, parsed });
     let count = 0;
     try {
-        count = await dispatchPushNotifications({
+        const outcome = await dispatchPushNotifications({
             subscribers: pushSubs,
             prefKey: spec.prefKey,
             marks,
@@ -838,6 +870,10 @@ async function dispatchAllNotifications(parsed, tournament, env) {
             },
             env, label: kind,
         });
+        count = outcome.count;
+        // The only thing that creates pending retries, so the only thing that
+        // needs to arm the sweep.
+        if (outcome.retried > 0) await storage.put('pendingRetries', true);
     } catch (err) { console.error(`Push ${kind} dispatch error:`, err.message); }
 
     // Mark all consumed signals in KV state.

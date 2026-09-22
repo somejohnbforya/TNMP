@@ -1,6 +1,13 @@
 export const TOURNAMENTS_LIST_URL = 'https://www.milibrary.org/chess/tournaments/';
 export const MI_BASE_URL = 'https://www.milibrary.org';
 
+// The cron runs inside one Durable Object instance. Both the scheduler and
+// /health address it by this name, so it lives here rather than in cron.js —
+// tournament.js would otherwise have to import from cron.js, which imports it.
+export function cronStub(env) {
+    return env.TOURNAMENT_CRON.get(env.TOURNAMENT_CRON.idFromName('singleton'));
+}
+
 export function corsHeaders(env, request) {
     const requestOrigin = request?.headers?.get('Origin') || '';
 

@@ -238,6 +238,8 @@ export async function listPushSubscriptions(env) {
     return subs;
 }
 
+// Returns { count, retried } — retried is what tells the cron whether a
+// later tick has any reason to scan for pending retries at all.
 export async function dispatchPushNotifications({ subscribers, prefKey, marks, buildPayload, shouldNotify, env, label }) {
     let count = 0, skipped = 0, retried = 0;
 
@@ -285,17 +287,19 @@ export async function dispatchPushNotifications({ subscribers, prefKey, marks, b
 
     if (skipped > 0) console.log(`Push ${label}: skipped ${skipped} subscriber(s) not in tournament`);
     if (retried > 0) console.log(`Push ${label}: ${retried} scheduled for retry`);
-    return count;
+    return { count, retried };
 }
 
+// Returns { count, remaining } — remaining counts subscribers still holding a
+// retry after this pass, so the caller knows whether to scan again next tick.
 export async function retryPendingNotifications(env) {
     const subs = await listPushSubscriptions(env);
     const now = new Date();
-    let count = 0;
+    let count = 0, remaining = 0;
 
     for (const { key, record } of subs) {
         if (!record?.retryAfter || !record.retryPayload) continue;
-        if (new Date(record.retryAfter) > now) continue;
+        if (new Date(record.retryAfter) > now) { remaining++; continue; }
 
         try {
             const payload = JSON.parse(record.retryPayload);
@@ -332,11 +336,12 @@ export async function retryPendingNotifications(env) {
                 record.retryPayload = null;
             } else {
                 record.retryAfter = new Date(Date.now() + 20 * 60 * 1000).toISOString();
+                remaining++;
             }
             await putRecord(env, key, record);
         }
     }
 
     if (count > 0) console.log(`Retries: ${count} succeeded`);
-    return count;
+    return { count, remaining };
 }
