@@ -9,6 +9,7 @@ import {
     composeRecapMessage, composeFinalMessage,
 } from './parser.js';
 import { classifyOpening } from './eco.js';
+import { recountPgnGames } from './games.js';
 
 export class TournamentCron extends DurableObject {
     async fetch(request) {
@@ -593,7 +594,7 @@ async function runCronLogic(env, storage) {
     }
     t.shellRecords = performance.now() - t0;
 
-    // Update tournament metadata (total_rounds, sections)
+    // Update tournament metadata (total_rounds, sections, pgn_games)
     try {
         const maxRound = await env.DB.prepare(
             'SELECT MAX(round) as max_round FROM games WHERE tournament_slug = ?'
@@ -610,6 +611,7 @@ async function runCronLogic(env, storage) {
         await env.DB.prepare(
             'UPDATE tournaments SET total_rounds = ?, sections = ? WHERE slug = ?'
         ).bind(maxRound.max_round, sections.length > 0 ? JSON.stringify(sections) : null, slug).run();
+        await recountPgnGames(env, slug).run();
     } catch (err) {
         console.error('Failed to update tournament metadata:', err.message);
         writeErrors.push(`tournament metadata: ${err.message}`);

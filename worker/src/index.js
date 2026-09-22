@@ -11,12 +11,12 @@
 
 import { corsHeaders, corsResponse, isAdminRequest } from './helpers.js';
 import { handleTournamentHtml, handleTournamentState, handleStandings, handleOgState, handleHealth } from './tournament.js';
-import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco } from './games.js';
+import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco, recountPgnGames } from './games.js';
 import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest, handlePushAck, handlePushClick } from './push.js';
 import { handleScheduled, TournamentCron, pairingsExpiresAt } from './cron.js';
 import { runUscfDiscovery } from './uscf.js';
 
-const USCF_CRON = '0 20 * * *';
+const DAILY_CRON = '0 20 * * *';
 
 // Re-export Durable Object class (required by wrangler)
 export { TournamentCron };
@@ -120,7 +120,11 @@ export default {
     },
 
     async scheduled(event, env, ctx) {
-        if (event.cron === USCF_CRON) {
+        if (event.cron === DAILY_CRON) {
+            // pgn_games self-heal (see recountPgnGames). A failure only waits a
+            // day for the next run, so it must not cost the USCF sync its run.
+            try { await recountPgnGames(env).run(); }
+            catch (err) { console.error('pgn_games recount failed:', err.message); }
             await runUscfDiscovery(env);
             return;
         }

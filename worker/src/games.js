@@ -409,13 +409,25 @@ export function tournamentMeta(t) {
     };
 }
 
+/**
+ * Recount tournaments.pgn_games — games we hold with moves — for one
+ * tournament, or all of them. Returns the prepared statement.
+ *
+ * The count is stored rather than computed in /tournaments, where it joined
+ * every game on every request. The cron recounts the tournament it just
+ * ingested; the daily cron recounts everything, which heals any write that
+ * bypassed the cron (a local repair script, a console fix) within a day.
+ */
+export function recountPgnGames(env, slug = null) {
+    const sql = `UPDATE tournaments SET pgn_games = (
+        SELECT COUNT(*) FROM games g
+        WHERE g.tournament_slug = tournaments.slug AND g.pgn IS NOT NULL AND g.pgn != '')`;
+    return slug ? env.DB.prepare(`${sql} WHERE slug = ?`).bind(slug) : env.DB.prepare(sql);
+}
+
 export async function handleTournaments(request, env) {
     const result = await env.DB.prepare(
-        `SELECT t.*, COUNT(CASE WHEN g.pgn IS NOT NULL AND g.pgn != '' THEN 1 END) AS pgn_games
-         FROM tournaments t
-         LEFT JOIN games g ON g.tournament_slug = t.slug
-         GROUP BY t.slug
-         ORDER BY json_extract(t.round_dates, '$[0]') DESC`
+        `SELECT * FROM tournaments ORDER BY json_extract(round_dates, '$[0]') DESC`
     ).all();
     return corsResponse(
         { tournaments: result.results.map(tournamentMeta) },
