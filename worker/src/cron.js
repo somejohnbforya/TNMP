@@ -16,7 +16,10 @@ export class TournamentCron extends DurableObject {
         // DO's own storage rather than KV, so a per-minute tick costs nothing
         // against KV's 1,000-writes-a-day free tier. /health reads it back.
         if (new URL(request.url).pathname === '/last-check') {
-            return Response.json((await this.ctx.storage.get('lastCheck')) ?? null);
+            const lastCheck = (await this.ctx.storage.get('lastCheck')) ?? null;
+            return new Response(JSON.stringify(lastCheck), {
+                headers: { 'Content-Type': 'application/json' },
+            });
         }
         await runCronLogic(this.env, this.ctx.storage);
         return new Response('ok');
