@@ -94,7 +94,9 @@ self.addEventListener('push', (event) => {
         body: data.body || '',
         icon: '/pieces/wK.webp',
         badge: '/pieces/wK.webp',
-        tag: `tnmp-${data.type || 'notification'}-r${data.round || 0}`,
+        // A tag without the tournament let a real notification silently replace
+        // a stale one for the same round of another tournament still on screen.
+        tag: `tnmp-${data.tournament ? `${data.tournament}-` : ''}${data.type || 'notification'}-r${data.round || 0}`,
         renotify: true,
         data: { url: data.url || '/', deviceId: data.deviceId || null },
     };

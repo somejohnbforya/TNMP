@@ -810,9 +810,20 @@ const STATE_KEY = { pairings: 'state:pairingsUp', results: 'state:resultsPosted'
 const TRACK_KEY = { pairings: 'lastNotifiedPairings', results: 'lastNotifiedResults', games: 'lastNotifiedGames' };
 const SIGNAL_LETTER = { pairings: 'p', results: 'r', games: 'g' };
 
+// The round to notify for when the tracked tournament's page names none (after
+// the last round MI replaces the pairings with prizes and final standings).
+// cache:appState describes what the app displays, and in the week before a new
+// tournament that is the NEXT one: its round 1 paired with this tournament's
+// slug re-announced Fall round 1's games on 2026-10-27. Its round counts only
+// when it describes the tournament being notified about.
+export function fallbackRound(appState, slug) {
+    return appState?.tournamentSlug === slug ? appState.round || null : null;
+}
+
 async function dispatchAllNotifications(parsed, tournament, env, storage) {
     const slug = tournament.slug || slugifyTournament(tournament.name);
-    const round = parsed?.roundNumber || (await env.SUBSCRIBERS.get('cache:appState', 'json'))?.round;
+    const round = parsed?.roundNumber
+        || fallbackRound(await env.SUBSCRIBERS.get('cache:appState', 'json'), slug);
     if (!round) {
         console.log('No round number known, skipping notifications.');
         return;
@@ -869,7 +880,7 @@ async function dispatchAllNotifications(parsed, tournament, env, storage) {
                 return {
                     title: spec.title,
                     body: spec.body(pairing, result),
-                    url: '/', type: kind, round,
+                    url: '/', type: kind, round, tournament: slug,
                     expiresAt: spec.expiresAt,
                 };
             },

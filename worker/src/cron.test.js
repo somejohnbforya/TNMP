@@ -1,5 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { resolveGameIds, assignBoards, movedPairings } from './cron.js';
+import { resolveGameIds, assignBoards, movedPairings, fallbackRound } from './cron.js';
+
+describe('fallbackRound', () => {
+    const fall = '2026-fall-tuesday-night-marathon';
+    const winter = '2026-winter-tuesday-night-marathon';
+
+    it('ignores the round of a different tournament (the 2026-10-27 gap week)', () => {
+        // App state had moved to Winter round 1 while the cron still tracked
+        // Fall, whose page had no pairings left.
+        expect(fallbackRound({ tournamentSlug: winter, round: 1 }, fall)).toBe(null);
+    });
+
+    it('uses the round when the app state describes the same tournament', () => {
+        expect(fallbackRound({ tournamentSlug: fall, round: 7 }, fall)).toBe(7);
+    });
+
+    it('is null without app state', () => {
+        expect(fallbackRound(null, fall)).toBe(null);
+    });
+});
 
 const FALL_R2_ERG_ID = '2352688410645319';
 
