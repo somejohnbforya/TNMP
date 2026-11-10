@@ -547,45 +547,30 @@ async function runCronLogic(env, storage) {
     t0 = performance.now();
     if (parsed.hasPairings) {
         try {
-            const shellStmts = [];
-            for (const { rnd, from, to, key } of movedPairings(posted, placed, existingMap)) {
-                shellStmts.push(env.DB.prepare(
-                    `DELETE FROM games WHERE tournament_slug = ? AND round = ? AND board = ? AND (pgn IS NULL OR pgn = '')`
-                ).bind(slug, rnd, from));
-                existingMap.delete(`${rnd}:${from}`);
-                place(rnd, key, to);
-            }
-            for (const { rnd, board, section, row, wInfo, bInfo, wc, bc, key } of posted) {
-                const ex = existingMap.get(`${rnd}:${board}`);
-                const result = parseGameResult(row.whiteResult, row.blackResult);
-
-                if (ex && (ex.result !== '*' || result === '*')) continue;
-                // This pair's game already sits on another board, where its PGN put it.
-                const at = placed.get(rnd)?.get(key);
-                if (at != null && at !== board) continue;
-
-                const white = wc.name, whiteNorm = wc.norm;
-                const black = bc.name, blackNorm = bc.norm;
+            // Each posted round is rewritten in one batch, so a failure leaves
+            // its stored rows as they were. Only the posted sections' rows are
+            // cleared: a section missing from the page keeps what it had.
+            const toWrite = pairingsToWrite(posted, placed, existingMap);
+            for (const rnd of new Set(posted.map(p => p.rnd))) {
+                const sections = [...new Set(posted.filter(p => p.rnd === rnd).map(p => normalizeSection(p.section)))];
+                const stmts = [env.DB.prepare(
+                    `DELETE FROM games WHERE tournament_slug = ? AND round = ? AND (pgn IS NULL OR pgn = '')
+                     AND section IN (${sections.map(() => '?').join(', ')})`
+                ).bind(slug, rnd, ...sections)];
                 const roundDate = tournament.roundDates?.[rnd - 1] || null;
-                shellStmts.push(
-                    env.DB.prepare(
+                for (const { board, section, row, wInfo, bInfo, wc, bc } of toWrite.filter(p => p.rnd === rnd)) {
+                    stmts.push(env.DB.prepare(
                         `INSERT INTO games
                          (tournament_slug, round, board, white, black, white_norm, black_norm, white_elo, black_elo, result, section, date, pgn)
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-                         ON CONFLICT(tournament_slug, round, board) DO UPDATE SET
-                          result = excluded.result
-                          WHERE games.result = '*' AND excluded.result != '*'`
-                    ).bind(slug, rnd, board, white, black, whiteNorm, blackNorm,
-                        wInfo.rating || ratingAtDate(white, roundDate),
-                        bInfo.rating || ratingAtDate(black, roundDate),
-                        result, normalizeSection(section), roundDate)
-                );
-            }
-            for (let i = 0; i < shellStmts.length; i += 100) {
-                await env.DB.batch(shellStmts.slice(i, i + 100));
-            }
-            if (shellStmts.length > 0) {
-                console.log(`Upserted ${shellStmts.length} shell records (insert or update result).`);
+                         ON CONFLICT(tournament_slug, round, board) DO NOTHING`
+                    ).bind(slug, rnd, board, wc.name, bc.name, wc.norm, bc.norm,
+                        wInfo.rating || ratingAtDate(wc.name, roundDate),
+                        bInfo.rating || ratingAtDate(bc.name, roundDate),
+                        parseGameResult(row.whiteResult, row.blackResult), normalizeSection(section), roundDate));
+                }
+                await env.DB.batch(stmts);
+                console.log(`Rewrote round ${rnd}'s pairings: ${stmts.length - 1} game(s) without moves.`);
             }
         } catch (err) {
             console.error('Failed to upsert shell records:', err.message, err.stack);
@@ -657,24 +642,23 @@ async function runCronLogic(env, storage) {
     console.log(`[TIMING] ${Object.entries(t).map(([k, v]) => `${k}=${v.toFixed(1)}ms`).join(' | ')} | total=${total.toFixed(1)}ms`);
 }
 
-// The moveless games the posted pairings move to another board, as
-// { rnd, key, from, to }. MI can renumber boards when it posts results (Fall
-// 2026 R3: Monday's boards 2, 3, 4 and 7 became 1-4, and the results skipped
-// them because each pair already sat on another board), and
-// a pairings row is less trusted than the results table, so a game stored
-// without moves follows its pair to the posted board. A game placed by its PGN
-// keeps its board. Every move is returned before any write, so games trading
-// boards clear both before either is rewritten.
+// The posted pairings that become rows. For their round they are the whole
+// truth about every game without moves: MI re-pairs after posting (Winter 2026
+// R2: twelve boards changed after Monday's first posting) and renumbers boards
+// when it posts results (Fall 2026 R3), so the cron deletes the round's
+// moveless rows and writes these in their place. A game with moves outranks a
+// pairing, so a pairing is dropped when its pair's game, or its board, already
+// holds one. MI can list a section twice; a pair's first row wins.
 // posted: { rnd, board, key }; placed: round → pair key → board;
 // existing: `round:board` → { hasPgn }
-export function movedPairings(posted, placed, existing) {
-    const moves = new Map();
-    for (const { rnd, board, key } of posted) {
-        const at = placed.get(rnd)?.get(key);
-        if (at == null || at === board || existing.get(`${rnd}:${at}`)?.hasPgn) continue;
-        moves.set(`${rnd}:${key}`, { rnd, key, from: at, to: board });
-    }
-    return [...moves.values()];
+export function pairingsToWrite(posted, placed, existing) {
+    const seen = new Set();
+    return posted.filter(({ rnd, board, key }) => {
+        if (seen.has(`${rnd}:${key}`)) return false;
+        seen.add(`${rnd}:${key}`);
+        const hasMoves = (b) => b != null && !!existing.get(`${rnd}:${b}`)?.hasPgn;
+        return !hasMoves(board) && !hasMoves(placed.get(rnd)?.get(key));
+    });
 }
 
 // The board each PGN in a round goes on. MI's sources arrive in trust order:

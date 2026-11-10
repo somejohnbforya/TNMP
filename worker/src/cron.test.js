@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveGameIds, assignBoards, movedPairings, fallbackRound } from './cron.js';
+import { resolveGameIds, assignBoards, pairingsToWrite, fallbackRound } from './cron.js';
 
 describe('fallbackRound', () => {
     const fall = '2026-fall-tuesday-night-marathon';
@@ -116,9 +116,9 @@ describe('assignBoards', () => {
     });
 });
 
-describe('movedPairings', () => {
-    const post = (key, board, rnd = 3) => ({ rnd, board, key });
-    const store = (rows, rnd = 3) => {
+describe('pairingsToWrite', () => {
+    const post = (key, board, rnd = 2) => ({ rnd, board, key });
+    const stored = (rows, rnd = 2) => {
         const placed = new Map([[rnd, new Map()]]);
         const existing = new Map();
         for (const [key, board, hasPgn = false] of rows) {
@@ -127,37 +127,27 @@ describe('movedPairings', () => {
         }
         return { placed, existing };
     };
+    const boards = (rows) => rows.map(r => `${r.key}@${r.board}`);
 
-    // Fall 2026 R3: Monday's pairings had these four on boards 2, 3, 4 and 7;
-    // the results table renumbered them 1-4, and their results never landed.
-    it('moves moveless games to the boards the results table renumbered', () => {
-        const { placed, existing } = store([['bambou|zavgorodniy', 2], ['cawthon|yoo', 3], ['fang|wang', 4], ['parsons|powers', 7], ['stults|zhao', 5]]);
-        const posted = [post('bambou|zavgorodniy', 1), post('cawthon|yoo', 2), post('fang|wang', 3), post('parsons|powers', 4), post('stults|zhao', 5)];
-        expect(movedPairings(posted, placed, existing)).toEqual([
-            { rnd: 3, key: 'bambou|zavgorodniy', from: 2, to: 1 },
-            { rnd: 3, key: 'cawthon|yoo', from: 3, to: 2 },
-            { rnd: 3, key: 'fang|wang', from: 4, to: 3 },
-            { rnd: 3, key: 'parsons|powers', from: 7, to: 4 },
-        ]);
+    // Winter 2026 R2: MI re-paired boards 11 and 13 after first posting them.
+    it('writes every re-paired board, whatever was stored there', () => {
+        const { placed, existing } = stored([['winslow|zhao', 11], ['lewis|winslow', 12], ['lewis|parsons', 13]]);
+        const posted = [post('riese|zhao', 11), post('lewis|winslow', 12), post('melville|parsons', 13)];
+        expect(boards(pairingsToWrite(posted, placed, existing))).toEqual(['riese|zhao@11', 'lewis|winslow@12', 'melville|parsons@13']);
     });
 
-    it('moves both games that trade boards', () => {
-        const { placed, existing } = store([['a|b', 1], ['c|d', 2]]);
-        expect(movedPairings([post('a|b', 2), post('c|d', 1)], placed, existing)).toHaveLength(2);
+    it("drops a pairing whose pair's game has moves on another board", () => {
+        const { placed, existing } = stored([['a|b', 9, true]]);
+        expect(pairingsToWrite([post('a|b', 2)], placed, existing)).toEqual([]);
     });
 
-    it('leaves a game placed by its PGN on its board', () => {
-        const { placed, existing } = store([['a|b', 9, true]]);
-        expect(movedPairings([post('a|b', 2)], placed, existing)).toEqual([]);
+    it('drops a pairing on a board that holds a game with moves', () => {
+        const { placed, existing } = stored([['c|d', 2, true]]);
+        expect(pairingsToWrite([post('a|b', 2)], placed, existing)).toEqual([]);
     });
 
-    it('moves a game once when MI lists its section twice', () => {
-        const { placed, existing } = store([['a|b', 2]]);
-        expect(movedPairings([post('a|b', 1), post('a|b', 1)], placed, existing)).toEqual([{ rnd: 3, key: 'a|b', from: 2, to: 1 }]);
-    });
-
-    it('ignores a pairing with no stored game', () => {
-        const { placed, existing } = store([]);
-        expect(movedPairings([post('a|b', 1)], placed, existing)).toEqual([]);
+    it('writes a pair once when MI lists its section twice', () => {
+        const { placed, existing } = stored([]);
+        expect(boards(pairingsToWrite([post('a|b', 1), post('a|b', 1)], placed, existing))).toEqual(['a|b@1']);
     });
 });
