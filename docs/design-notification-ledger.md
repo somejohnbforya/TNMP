@@ -1,6 +1,6 @@
 # Design: a ledger of notification events
 
-**Status:** draft, 2026-11-06, waiting on John's answers to the open questions (§8). No code yet.
+**Status:** stage 1 built, 2026-11-18, on branch `notification-ledger`; deploy waits on John's go. Stages 2–4 are not started (§9). Three interim fixes are live (§8a).
 
 ## 1. What went wrong
 
@@ -23,6 +23,12 @@ MI added the round 1 PGNs at 3:20:17pm PT. The notification went out at 3:20:26p
 The most likely cause, not yet confirmed on a device: the spurious notification and the real one share the tag `tnmp-games-r1`, because the tag is built from the signal and the round and leaves out the tournament. Where the Oct 27 notification was still sitting in someone's notification list, the real one *replaced* it instead of arriving as a new one. Some platforms, iOS among them, may do that replacement silently. To confirm: ask the people who reported it which device they use, and whether an old "Round 1 Games Are Up!" was still showing.
 
 We can't tell more than that, because nothing records whether a device displayed a notification. The service worker's "shown" ack does write `lastDisplayedAt`, but that field is lost in a race (§2), and only 8 of the 22 devices show an ack for today.
+
+### Round 3 read as round 4 (Tue Nov 17)
+
+MI posted round 3's results with the Extra Rated section headed "Pairings for Round 4"; Extra Rated numbers its own rounds and had run ahead. The parser took the page's round as the highest across all sections, so the worker thought it was round 4. The site showed round 4, whose only game was the Extra Rated one. Round 3's results were never announced. A "Round 4 Pairings Are Up!" notification reached 4 devices instead: the per-player lookups searched only the round 4 section, which was Extra Rated, so only Melville and three devices with no player name matched. Fixed in `ebaa22f` (§8a), and the stored state was repaired by hand.
+
+That's the second notification bug in three weeks caused by the worker working out "the current round" wrongly. Each interim fix closes one way of getting it wrong. The ledger removes the need to work it out at all.
 
 ## 2. Why: a one-item memory, compared by equality
 
@@ -108,11 +114,19 @@ CREATE TABLE notification_deliveries (
 
 **A backstop for going backwards:** refuse to record an event whose round is lower than the highest round already recorded for the same tournament and signal, and log it. A pairings or results event for round 3 after round 4 can only come from a bad input. The backstop doesn't apply to games, because MI could post games late or out of order, and membership already covers that.
 
-**Staleness:** an event first seen after it stops being useful is recorded as `stale` and not sent: pairings after the round has started, results after 12 hours, games after 24 hours. These are the expiry times already set on the payloads. This also covers recording an event for the first time long after it happened.
+**Staleness:** an event first seen after it stops being useful is recorded as `stale` and not sent. This also covers recording an event for the first time long after it happened. The windows, each one named constant:
+
+| event | sendable until |
+|---|---|
+| pairings for round N | round N starts |
+| results for round N | 12 hours after first seen |
+| games for round N | round N+1 starts; for the last round, 7 days after it. PGNs sometimes don't go up until the weekend (John, 2026-11-06), so a fixed 24 hours would drop real games messages |
+
+The push's own `expiresAt`, which limits retries, uses the same time.
 
 ### 4.3 Where events come from
 
-- **Pairings and results** come only from the TNM sections' own "Pairings for Round N" headers, each carrying its own round. The round is never filled in from `cache:appState`, and Extra Rated sections never count. A page with no TNM pairings tables gives no pairings or results events, which is right: there is nothing to announce.
+- **Pairings and results** come only from the TNM sections' own "Pairings for Round N" headers, each carrying its own round. The round is never filled in from `cache:appState`, and Extra Rated sections never count (the parser already works this way since `ebaa22f`). A page with no TNM pairings tables gives no pairings or results events, which is right: there is nothing to announce.
 - **Games** come from D1 and need no round to be worked out. Each tick checks every round of the tracked tournament that is ready (more than half its rows have moves) and has no games event yet. "Which round are we on?" stops mattering for games.
 - The tournament ID is always the one whose page or rows produced the event. The app's display state (`computeAppState`, which looks ahead to the next tournament during the gap week) is never consulted. This removes the trigger in §1 at its source.
 
@@ -123,6 +137,8 @@ On each tick, gather the events that were newly claimed and pick one message, us
 ### 4.5 Deliveries and retries
 
 Each device the message is addressed to gets a `pending` delivery row, and the send updates it. Retries read the `pending` rows that are due, instead of scanning every device record in KV. The payload carries the `event_key`. The ack and click handlers run a single `UPDATE ... SET displayed_at = ?` on one delivery row: no reading first, and no shared record to overwrite.
+
+**Old service workers.** TNMP has real users, so phones keep running the old service worker until their owner next opens the site. An old one acks with only `deviceId` and no `event_key`. The handler then stamps that device's most recent delivered row, which is the notification it just showed. It's one `UPDATE`, the same shape as the new path, so there's no separate code for old clients to remove later.
 
 The device record in KV is left holding only what describes the device: its subscription, name, preferences and label. It's written only when a device subscribes or changes its preferences.
 
@@ -136,7 +152,9 @@ The device record in KV is left holding only what describes the device: its subs
 
 ## 5. Rollout: seed before switching
 
-When the ledger is first deployed it's empty, so every event that has already happened would look new. The deploy therefore starts by **seeding**: one `seeded` row for every event that has already happened in the current tournament, plus the previous one. Those are pairings and results up to the latest round on the page, and games for every round already ready. Seeding comes first; switching dispatch over comes second. Run it between Tuesday night and Monday 8pm, so no live signal is in progress.
+When the ledger is first deployed it's empty, so every event that has already happened would look new. The migration that creates the tables therefore also **seeds** them from D1 itself, in plain SQL: one `seeded` row for every event that has already happened in **every** tournament the database knows. For each tournament and each round that has games, that's pairings and results; for each round whose games are ready, that's games too. Seeding all of history, not just the current tournament, means no past event can ever look new again, which is the whole class behind the Oct 27 bug.
+
+CI applies migrations before it deploys the worker, so the ledger is seeded before the new dispatch code runs. The one event the games table can't show is pairings posted for a round that hasn't been played yet, which exist from Monday night until Tuesday night. A migration can't read KV, where the old state lives, so the deploy avoids that window instead: **deploy between Tuesday night, once results are posted, and Monday 8pm.** Then every round on MI's page already has games, and so has seeded rows.
 
 A delivery row for a seeded event is never created, so today's "shown" data simply starts fresh.
 
@@ -164,7 +182,9 @@ Each of these runs the production worker against the real local D1 and KV of `wr
 7. **Acks:** an ack arriving while the dispatch is still running is never lost, and never erases a delivery.
 8. **Tags:** two events for the same round number in different tournaments get different tags.
 
-The worker's tests currently run in plain Node: vitest aliases `cloudflare:workers` to `src/__mocks__/`, and `cron.kv.test.js` and `push.test.js` use hand-written fakes of KV and the Durable Object's storage. The real runtime is `@cloudflare/vitest-pool-workers`, which runs tests inside workerd with local D1 and KV. Moving to it is a step of its own, done before this change. The tests that go with this change replace the fakes rather than extending them.
+**Where the tests run (corrected 2026-11-18).** This note first said the worker's tests had to move to `@cloudflare/vitest-pool-workers` before this change. They don't. `games.d1.test.js` already runs production SQL against real SQLite (`node:sqlite`) with every real migration applied, and D1 is SQLite. The ledger lives in D1, so its tests use that same harness, extended with `batch()`. That includes the seeding migration, run over rows shaped like the real ones.
+
+What stays outside them: the push services themselves, which we don't control; and the device records in KV, which are now only read during dispatch. `cron.kv.test.js` and `push.test.js` fake KV; the parts of them that test notification state go away with that state.
 
 ## 8. John's answers (2026-11-06)
 
@@ -180,9 +200,20 @@ John's ruling: one thing at a time. First make the current design work as intend
 - **The round comes only from the tournament being notified about.** `fallbackRound` uses `cache:appState`'s round only when that state describes the same tournament. That removes the trigger in §1. The Fall round 7 case still works: in Fall's results window the app state describes Fall, round 7.
 - **Notification tags include the tournament.** `tnmp-<slug>-<type>-r<round>`, so a real notification can't silently replace another tournament's notification for the same round. It takes effect for each device once its service worker updates (the next time they open the site).
 
-Known risks the interim fix leaves in place, all covered by the ledger: the race in which an ack and a delivery overwrite each other's change to the device record (§2.4), and a retry that succeeds without setting the device's mark. Both matter only if a signal is dispatched a second time, which the `state:*` keys prevent.
+- **(2026-11-18, `ebaa22f`) The page's round comes only from the TNM sections.** Extra Rated sections count as the current night's games whatever round they're numbered, so the per-player lookups always include them (§1, round 3 read as round 4).
 
-## 9. Not covered here
+Known risks the interim fixes leave in place, all covered by the ledger: the race in which an ack and a delivery overwrite each other's change to the device record (§2.4), and a retry that succeeds without setting the device's mark. Both matter only if a signal is dispatched a second time, which the `state:*` keys prevent.
+
+## 9. Stages
+
+One thing at a time (John, 2026-11-06). Each stage ships on its own, and stage 1 is the whole replacement in one change: building the ledger beside the old state and switching over later would mean running two routes.
+
+1. **The ledger.** One migration creates both tables and seeds them (§5). Dispatch collects the events it sees, claims them, picks one message and records deliveries (§4.2–4.5). Retries read pending deliveries; ack and click become one `UPDATE`; the notification tag becomes the event key. `/health` reads the latest events from the ledger. The `state:*` keys, the per-device marks and the retry fields on device records go (§4.6). Messages and who receives them don't change.
+2. **Alerts to John.** An event that is due but never seen alerts John, never subscribers. The ledger plus the round dates say what's due. To settle first: when each event counts as overdue, and how the alert reaches John. One option is a push to devices flagged as his; another is an email, which needs Cloudflare Email Sending, since today's address only forwards incoming mail.
+3. **Players on byes** get the pairings and results messages (§6, John's answer 3). This is only a change to who receives them.
+4. **Scheduled events**, such as "Winter TNM starts tonight" (§3). Which messages, and when, is still to be designed.
+
+## 10. Not covered here
 
 - The service worker's tag collision affects only notifications that are still sitting in someone's list. §4.4 fixes it for the future; nothing can be done about the old one now.
 - `getTimeState`'s seven-day look-ahead is still right for what the app *displays*. This design only stops notifications from reading it.

@@ -1,7 +1,6 @@
 import { corsResponse, corsHeaders, isAllowedPushEndpoint, isAdminRequest } from './helpers.js';
 import { sendPushNotification } from './webpush.js';
-
-const KV_TTL = 7776000; // 90 days in seconds
+import { stampDelivery } from './ledger.js';
 
 async function sha256Hex(input) {
     const encoded = new TextEncoder().encode(input);
@@ -19,8 +18,11 @@ async function endpointKey(endpoint) {
     return deviceKey(await sha256Hex(endpoint));
 }
 
+// No expiry: a subscription the push service no longer knows is deleted when
+// a send comes back gone. What was sent, shown and clicked lives in the
+// ledger's delivery rows, so a record is written only when the device changes.
 async function putRecord(env, key, record) {
-    await env.SUBSCRIBERS.put(key, JSON.stringify(record), { expirationTtl: KV_TTL });
+    await env.SUBSCRIBERS.put(key, JSON.stringify(record));
 }
 
 export async function handlePushSubscribe(request, env) {
@@ -57,16 +59,7 @@ export async function handlePushSubscribe(request, env) {
         deviceId: deviceId || null,
         endpoint: subscription.endpoint,
         keys: subscription.keys,
-        lastNotifiedPairings: existing?.lastNotifiedPairings || null,
-        lastNotifiedResults: existing?.lastNotifiedResults || null,
-        lastNotifiedGames: existing?.lastNotifiedGames || null,
         createdAt: existing?.createdAt || new Date().toISOString(),
-        lastDeliveredAt: existing?.lastDeliveredAt || null,
-        lastDisplayedAt: existing?.lastDisplayedAt || null,
-        lastClickedAt: existing?.lastClickedAt || null,
-        failCount: existing?.failCount || 0,
-        retryAfter: existing?.retryAfter || null,
-        retryPayload: existing?.retryPayload || null,
     });
 
     return corsResponse({ success: true }, 200, env, request);
@@ -133,33 +126,17 @@ export async function handlePushPreferences(request, env) {
     return corsResponse({ success: true }, 200, env, request);
 }
 
-export async function handlePushAck(request, env) {
+// The service worker reports a notification shown or clicked. The event key
+// is absent from service workers older than the ledger.
+async function stamp(request, env, column) {
     const url = new URL(request.url);
     const deviceId = url.searchParams.get('deviceId');
-    if (!deviceId) return new Response('', { status: 204, headers: corsHeaders(env, request) });
-
-    const key = deviceKey(deviceId);
-    const record = await env.SUBSCRIBERS.get(key, 'json');
-    if (record) {
-        record.lastDisplayedAt = new Date().toISOString();
-        await putRecord(env, key, record);
-    }
+    if (deviceId) await stampDelivery(env, column, deviceId, url.searchParams.get('event'), Date.now());
     return new Response('', { status: 204, headers: corsHeaders(env, request) });
 }
 
-export async function handlePushClick(request, env) {
-    const url = new URL(request.url);
-    const deviceId = url.searchParams.get('deviceId');
-    if (!deviceId) return new Response('', { status: 204, headers: corsHeaders(env, request) });
-
-    const key = deviceKey(deviceId);
-    const record = await env.SUBSCRIBERS.get(key, 'json');
-    if (record) {
-        record.lastClickedAt = new Date().toISOString();
-        await putRecord(env, key, record);
-    }
-    return new Response('', { status: 204, headers: corsHeaders(env, request) });
-}
+export const handlePushAck = (request, env) => stamp(request, env, 'displayed_at');
+export const handlePushClick = (request, env) => stamp(request, env, 'clicked_at');
 
 export async function handlePushTest(request, env) {
     const { type, key: authKey } = await request.json();
@@ -236,112 +213,4 @@ export async function listPushSubscriptions(env) {
     } while (cursor);
 
     return subs;
-}
-
-// Returns { count, retried } — retried is what tells the cron whether a
-// later tick has any reason to scan for pending retries at all.
-export async function dispatchPushNotifications({ subscribers, prefKey, marks, buildPayload, shouldNotify, env, label }) {
-    let count = 0, skipped = 0, retried = 0;
-
-    // Per-subscriber dedup: skip only when ALL marks are already-notified.
-    // If any mark is missing, dispatch (the user is owed at least one signal).
-    const isMarked = (record, m) => record[m.trackKey] === m.trackValue;
-
-    for (const { key, record } of subscribers) {
-        if (!record || record[prefKey] === false) continue;
-        if (marks.every(m => isMarked(record, m))) continue;
-        if (shouldNotify && !shouldNotify(record)) { skipped++; continue; }
-
-        const payloadObj = await buildPayload(record);
-        payloadObj.deviceId = record.deviceId || null;
-        const payload = JSON.stringify(payloadObj);
-
-        const result = await sendPushNotification(
-            { endpoint: record.endpoint, keys: record.keys },
-            payload,
-            env
-        );
-
-        if (result.success) {
-            for (const m of marks) record[m.trackKey] = m.trackValue;
-            record.lastDeliveredAt = new Date().toISOString();
-            record.failCount = 0;
-            record.retryAfter = null;
-            record.retryPayload = null;
-            await putRecord(env, key, record);
-            count++;
-        } else if (result.gone) {
-            console.log(`Push subscription gone, removing: ${key}`);
-            await env.SUBSCRIBERS.delete(key);
-        } else {
-            record.failCount = (record.failCount || 0) + 1;
-            if (record.failCount < 5) {
-                record.retryAfter = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-                record.retryPayload = payload;
-                retried++;
-            }
-            console.error(`Push ${label} failed for ${key} (attempt ${record.failCount}): ${result.error}`);
-            await putRecord(env, key, record);
-        }
-    }
-
-    if (skipped > 0) console.log(`Push ${label}: skipped ${skipped} subscriber(s) not in tournament`);
-    if (retried > 0) console.log(`Push ${label}: ${retried} scheduled for retry`);
-    return { count, retried };
-}
-
-// Returns { count, remaining } — remaining counts subscribers still holding a
-// retry after this pass, so the caller knows whether to scan again next tick.
-export async function retryPendingNotifications(env) {
-    const subs = await listPushSubscriptions(env);
-    const now = new Date();
-    let count = 0, remaining = 0;
-
-    for (const { key, record } of subs) {
-        if (!record?.retryAfter || !record.retryPayload) continue;
-        if (new Date(record.retryAfter) > now) { remaining++; continue; }
-
-        try {
-            const payload = JSON.parse(record.retryPayload);
-            if (payload.expiresAt && new Date(payload.expiresAt) < now) {
-                console.log(`Retry expired for ${key}, clearing`);
-                record.retryAfter = null;
-                record.retryPayload = null;
-                await putRecord(env, key, record);
-                continue;
-            }
-        } catch { /* payload parse failed, clear it */ }
-
-        const result = await sendPushNotification(
-            { endpoint: record.endpoint, keys: record.keys },
-            record.retryPayload,
-            env
-        );
-
-        if (result.success) {
-            record.lastDeliveredAt = new Date().toISOString();
-            record.failCount = 0;
-            record.retryAfter = null;
-            record.retryPayload = null;
-            await putRecord(env, key, record);
-            count++;
-            console.log(`Retry succeeded for ${key}`);
-        } else if (result.gone) {
-            await env.SUBSCRIBERS.delete(key);
-        } else {
-            record.failCount = (record.failCount || 0) + 1;
-            if (record.failCount >= 5) {
-                console.log(`Push ${key} dormant after ${record.failCount} failures, stopping retries`);
-                record.retryAfter = null;
-                record.retryPayload = null;
-            } else {
-                record.retryAfter = new Date(Date.now() + 20 * 60 * 1000).toISOString();
-                remaining++;
-            }
-            await putRecord(env, key, record);
-        }
-    }
-
-    if (count > 0) console.log(`Retries: ${count} succeeded`);
-    return { count, remaining };
 }

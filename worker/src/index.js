@@ -13,7 +13,7 @@ import { corsHeaders, corsResponse, isAdminRequest } from './helpers.js';
 import { handleTournamentHtml, handleTournamentState, handleStandings, handleOgState, handleHealth } from './tournament.js';
 import { handleOgGame, handleOgGameImage, handleQuery, handleTournaments, handlePlayers, handleEcoClassify, handleEcoData, handleSubmitGame, handleBackfillEco, recountPgnGames } from './games.js';
 import { handlePushSubscribe, handlePushUnsubscribe, handlePushStatus, handlePushPreferences, handlePushTest, handlePushAck, handlePushClick } from './push.js';
-import { handleScheduled, TournamentCron, pairingsExpiresAt } from './cron.js';
+import { handleScheduled, TournamentCron } from './cron.js';
 import { runUscfDiscovery } from './uscf.js';
 
 const DAILY_CRON = '0 20 * * *';
@@ -23,8 +23,7 @@ export { TournamentCron };
 
 // Re-export for tests
 export { getTimeState, computeAppState } from './tournament.js';
-export { selectNotificationKind, KIND_CONSUMES, isGamesReady } from './cron.js';
-export { pairingsExpiresAt };
+export { selectNotificationKind, KIND_CONSUMES } from './cron.js';
 
 export default {
     async fetch(request, env) {

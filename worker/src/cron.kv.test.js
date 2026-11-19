@@ -1,16 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-// cron.js calls into push.js for the retry sweep; the sweep's whole point is
-// deciding whether that call happens at all, so the module is stubbed and the
-// assertion is on the call count.
-const retryPendingNotifications = vi.fn();
-vi.mock('./push.js', () => ({
-    retryPendingNotifications: (...a) => retryPendingNotifications(...a),
-    listPushSubscriptions: vi.fn(),
-    dispatchPushNotifications: vi.fn(),
-}));
-
-const { putAppStateIfChanged, sweepPendingRetries } = await import('./cron.js');
+import { describe, it, expect } from 'vitest';
+import { putAppStateIfChanged } from './cron.js';
 
 function fakeKV(initial = {}) {
     const store = new Map(Object.entries(initial));
@@ -25,18 +14,6 @@ function fakeKV(initial = {}) {
             return type === 'json' ? JSON.parse(v) : v;
         },
         async put(key, value) { ops.put++; store.set(key, value); },
-    };
-}
-
-function fakeStorage(initial = {}) {
-    const m = new Map(Object.entries(initial));
-    return {
-        peek: (k) => m.get(k),
-        async get(k) { return m.get(k); },
-        async put(k, v) {
-            if (typeof k === 'object') { for (const [kk, vv] of Object.entries(k)) m.set(kk, vv); return; }
-            m.set(k, v);
-        },
     };
 }
 
@@ -105,52 +82,5 @@ describe('putAppStateIfChanged', () => {
         await putAppStateIfChanged({ SUBSCRIBERS }, STATE);
         const moved = { ...STATE, roundDates: ['2026-09-22T01:30:00Z', '2026-09-30T01:30:00Z'] };
         expect(await putAppStateIfChanged({ SUBSCRIBERS }, moved)).toBe(true);
-    });
-});
-
-describe('sweepPendingRetries', () => {
-    beforeEach(() => retryPendingNotifications.mockReset());
-
-    it('does not scan when nothing is pending and the floor is not due', async () => {
-        const storage = fakeStorage({ pendingRetries: false, lastRetrySweep: Date.now() });
-        await sweepPendingRetries({}, storage);
-        expect(retryPendingNotifications).not.toHaveBeenCalled();
-    });
-
-    it('scans when a dispatch armed the flag', async () => {
-        retryPendingNotifications.mockResolvedValue({ count: 1, remaining: 0 });
-        const storage = fakeStorage({ pendingRetries: true, lastRetrySweep: Date.now() });
-        await sweepPendingRetries({}, storage);
-        expect(retryPendingNotifications).toHaveBeenCalledOnce();
-    });
-
-    it('disarms the flag once nothing is left pending', async () => {
-        retryPendingNotifications.mockResolvedValue({ count: 1, remaining: 0 });
-        const storage = fakeStorage({ pendingRetries: true, lastRetrySweep: Date.now() });
-        await sweepPendingRetries({}, storage);
-        expect(storage.peek('pendingRetries')).toBe(false);
-    });
-
-    it('keeps the flag armed while a retry is still waiting', async () => {
-        retryPendingNotifications.mockResolvedValue({ count: 0, remaining: 2 });
-        const storage = fakeStorage({ pendingRetries: true, lastRetrySweep: Date.now() });
-        await sweepPendingRetries({}, storage);
-        expect(storage.peek('pendingRetries')).toBe(true);
-    });
-
-    // The self-healing half: a retry stranded by a lost flag waits an hour,
-    // not forever.
-    it('scans on the hourly floor even with the flag clear', async () => {
-        retryPendingNotifications.mockResolvedValue({ count: 0, remaining: 0 });
-        const storage = fakeStorage({ pendingRetries: false, lastRetrySweep: Date.now() - 61 * 60 * 1000 });
-        await sweepPendingRetries({}, storage);
-        expect(retryPendingNotifications).toHaveBeenCalledOnce();
-    });
-
-    it('scans on a cold start, when no sweep has ever run', async () => {
-        retryPendingNotifications.mockResolvedValue({ count: 0, remaining: 0 });
-        const storage = fakeStorage();
-        await sweepPendingRetries({}, storage);
-        expect(retryPendingNotifications).toHaveBeenCalledOnce();
     });
 });

@@ -1,38 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
-import fs from 'node:fs';
 import { handleTournaments, recountPgnGames, resolvePlayerNorm } from './games.js';
-
-const MIGRATIONS = new URL('../migrations/', import.meta.url);
-const migrationFiles = fs.readdirSync(MIGRATIONS).filter(f => f.endsWith('.sql')).sort();
-
-// A D1 binding over node:sqlite with the real migrations applied, so these
-// tests run production SQL against the production schema. `before` stops
-// short of a migration so a test can seed rows for it to backfill. Every
-// prepared statement is recorded so a test can ask SQLite for its plan.
-function d1({ before } = {}) {
-    const db = new DatabaseSync(':memory:');
-    const pending = [...migrationFiles];
-    const migrate = (until) => {
-        while (pending.length && !(until && pending[0] >= until)) {
-            db.exec(fs.readFileSync(new URL(pending.shift(), MIGRATIONS), 'utf8'));
-        }
-    };
-    migrate(before);
-
-    const prepared = [];
-    const stmt = (sql, params) => ({
-        bind: (...p) => stmt(sql, p),
-        first: async () => db.prepare(sql).get(...params) ?? null,
-        all: async () => ({ results: db.prepare(sql).all(...params) }),
-        run: async () => ({ meta: { changes: db.prepare(sql).run(...params).changes } }),
-    });
-    return {
-        db, prepared,
-        migrateRest: () => migrate(),
-        env: { DB: { prepare: (sql) => { prepared.push(sql); return stmt(sql, []); } } },
-    };
-}
+import { d1 } from './d1.testkit.js';
 
 const plan = (db, sql) => db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all().map(r => r.detail);
 

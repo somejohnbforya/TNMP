@@ -78,6 +78,9 @@ self.addEventListener('fetch', (event) => {
 
 const API_URL = 'https://api.tnmpairings.com';
 
+const stampQuery = (deviceId, eventKey) =>
+    new URLSearchParams(eventKey ? { deviceId, event: eventKey } : { deviceId }).toString();
+
 self.addEventListener('push', (event) => {
     if (!event.data) return;
 
@@ -94,17 +97,17 @@ self.addEventListener('push', (event) => {
         body: data.body || '',
         icon: '/pieces/wK.webp',
         badge: '/pieces/wK.webp',
-        // A tag without the tournament let a real notification silently replace
-        // a stale one for the same round of another tournament still on screen.
-        tag: `tnmp-${data.tournament ? `${data.tournament}-` : ''}${data.type || 'notification'}-r${data.round || 0}`,
+        // One tag per event, so one notification can never silently replace
+        // another's on screen.
+        tag: `tnmp-${data.eventKey || `${data.type || 'notification'}-r${data.round || 0}`}`,
         renotify: true,
-        data: { url: data.url || '/', deviceId: data.deviceId || null },
+        data: { url: data.url || '/', deviceId: data.deviceId || null, eventKey: data.eventKey || null },
     };
 
     event.waitUntil(
         self.registration.showNotification(title, options).then(() => {
             if (data.deviceId) {
-                fetch(`${API_URL}/push-ack?deviceId=${data.deviceId}`).catch(() => {});
+                fetch(`${API_URL}/push-ack?${stampQuery(data.deviceId, data.eventKey)}`).catch(() => {});
             }
         })
     );
@@ -117,7 +120,7 @@ self.addEventListener('notificationclick', (event) => {
     const deviceId = event.notification.data?.deviceId;
 
     if (deviceId) {
-        fetch(`${API_URL}/push-click?deviceId=${deviceId}`).catch(() => {});
+        fetch(`${API_URL}/push-click?${stampQuery(deviceId, event.notification.data?.eventKey)}`).catch(() => {});
     }
 
     event.waitUntil(

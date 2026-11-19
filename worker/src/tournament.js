@@ -1,4 +1,5 @@
 import { corsResponse, slugifyTournament, pacificDatetime, pacificNow, TOURNAMENTS_LIST_URL, MI_BASE_URL, cronStub } from './helpers.js';
+import { latestEvents } from './ledger.js';
 import { hasPairings, hasResults, parseRoundDates, extractTournamentName, parseTournamentList, parseStandings } from './parser.js';
 
 // Falls back to MI listing page discovery during ~7-day gaps between tournaments
@@ -428,11 +429,9 @@ async function readLastCheck(env) {
 }
 
 export async function handleHealth(env, request) {
-    const [lastCheckData, pairingsState, resultsState, gamesState, cached] = await Promise.all([
+    const [lastCheckData, notifications, cached] = await Promise.all([
         readLastCheck(env),
-        env.SUBSCRIBERS.get('state:pairingsUp', 'json'),
-        env.SUBSCRIBERS.get('state:resultsPosted', 'json'),
-        env.SUBSCRIBERS.get('state:gamesPosted', 'json'),
+        latestEvents(env),
         env.SUBSCRIBERS.get('cache:tournamentHtml', 'json'),
     ]);
 
@@ -442,7 +441,7 @@ export async function handleHealth(env, request) {
         status: 'ok',
         lastCheck: lastCheckData || null,
         minutesSinceLastCheck: lastCheckTime ? Math.round((Date.now() - lastCheckTime) / 60000) : null,
-        pairingsUp: pairingsState || null, resultsPosted: resultsState || null, gamesPosted: gamesState || null,
+        notifications,
         cachedRound: cached?.round || null, cachedAt: cached?.fetchedAt || null,
     }, 200, env, request);
 }
