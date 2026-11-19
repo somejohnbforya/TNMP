@@ -133,7 +133,6 @@ export function parseTournamentPage(html) {
     const standingsParts = [];
     const pairingsParts = [];
     const pairingsSections = [];
-    let roundNumber = null;
     let match;
 
     while ((match = sectionRegex.exec(html)) !== null) {
@@ -146,7 +145,6 @@ export function parseTournamentPage(html) {
             const m = h3Text.match(/Pairings for Round (\d+)\.\s*[^:]*:\s*(.+)/);
             if (m) {
                 const round = parseInt(m[1], 10);
-                if (roundNumber === null || round > roundNumber) roundNumber = round;
                 pairingsSections.push({ round, section: normalizeSection(m[2]), rows: parsePairingsTable(table) });
             }
         } else if (/Standings/i.test(h3Text)) {
@@ -159,6 +157,7 @@ export function parseTournamentPage(html) {
     if (pairingsParts.length > 0) strippedHtml += '\n<h2>Pairings</h2>\n' + pairingsParts.join('\n');
     if (!strippedHtml) strippedHtml = html;
 
+    const roundNumber = findMaxRound(pairingsSections) || null;
     const hasPairingsResult = pairingsSections.length > 0;
     const hasResultsResult = checkResults(pairingsSections);
 
@@ -172,11 +171,18 @@ export function parseTournamentPage(html) {
     };
 }
 
+// The page's TNM round. Extra Rated numbers its own rounds and can run ahead
+// (Winter 2026: "Round 4" beside round 3's results), so it never sets the
+// round; its sections are the current night's games whatever they're numbered.
+const isExtraSection = (s) => /extra/i.test(s.section);
+
 function findMaxRound(sections) {
     let max = 0;
-    for (const s of sections) { if (s.round > max) max = s.round; }
+    for (const s of sections) { if (!isExtraSection(s) && s.round > max) max = s.round; }
     return max;
 }
+
+const isCurrentSection = (s, round) => isExtraSection(s) || s.round === round;
 
 function checkResults(sections) {
     if (sections.length === 0) return false;
@@ -184,8 +190,7 @@ function checkResults(sections) {
     let totalGames = 0;
     let gamesWithResults = 0;
     for (const s of sections) {
-        if (s.round !== maxRound) continue;
-        if (/extra/i.test(s.section)) continue;
+        if (s.round !== maxRound || isExtraSection(s)) continue;
         for (const row of s.rows) {
             if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) continue;
             totalGames++;
@@ -200,7 +205,7 @@ export function findPlayerPairingFromSections(sections, playerName) {
     const maxRound = findMaxRound(sections);
 
     for (const s of sections) {
-        if (s.round !== maxRound) continue;
+        if (!isCurrentSection(s, maxRound)) continue;
         for (const row of s.rows) {
             if (playerRegex.test(row.whiteName)) {
                 if (/^(bye|full point bye)$/i.test(row.blackName)) {
@@ -234,7 +239,7 @@ export function findPlayerResultFromSections(sections, playerName) {
     const maxRound = findMaxRound(sections);
 
     for (const s of sections) {
-        if (s.round !== maxRound) continue;
+        if (!isCurrentSection(s, maxRound)) continue;
         for (const row of s.rows) {
             if (playerRegex.test(row.whiteName)) return row.whiteResult || null;
             if (playerRegex.test(row.blackName)) return row.blackResult || null;

@@ -356,6 +356,17 @@ describe('parseTournamentPage', () => {
         ]);
     });
 
+    // Winter 2026: MI numbered Extra Rated "Round 4" beside round 3's results,
+    // and the page read as round 4 with no results.
+    it('takes the round from the TNM sections when Extra Rated runs ahead', () => {
+        const ahead = fullHtml.replaceAll('Pairings for Round 3. 2026 New Year&#39;s Tuesday Night Marathon: Extra Games',
+            'Pairings for Round 5. 2026 New Year&#39;s Tuesday Night Marathon: Extra Games');
+        const result = parseTournamentPage(ahead);
+        expect(result.roundNumber).toBe(4);
+        expect(result.hasResults).toBe(true);
+        expect(findPlayerPairingFromSections(result.pairingsSections, 'John Boyer').opponent).toBe('Phil Ploquin');
+    });
+
     it('handles HTML with no pairings or PGN', () => {
         const empty = '<html><body>No tournament data</body></html>';
         const result = parseTournamentPage(empty);

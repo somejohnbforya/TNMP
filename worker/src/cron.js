@@ -412,6 +412,8 @@ async function runCronLogic(env, storage) {
         // Extra Rated pairings count their own rounds; their games are
         // played in the page's current TNM round.
         const rnd = isExtraRated(section.section) ? parsed.roundNumber : section.round;
+        // A page with only Extra Rated pairings names no TNM round to put them in.
+        if (!rnd) continue;
         for (const row of section.rows) {
             if (/^(bye|full point bye)$/i.test(row.whiteName) || /^(bye|full point bye)$/i.test(row.blackName)) continue;
             if (isForfeitPairing(row)) continue;
