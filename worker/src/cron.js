@@ -422,7 +422,7 @@ async function runCronLogic(env, storage) {
         const storedByRound = new Map();
         for (const row of existing.results) {
             const stored = {
-                key: pairKey(row.white_norm, row.black_norm), board: row.board,
+                key: pairKey(row.white_norm, row.black_norm), board: row.board, section: row.section,
                 extra: isExtraRated(row.section), hasPgn: !!row.pgn,
             };
             existingMap.set(`${row.round}:${row.board}`, { result: row.result, hasPgn: stored.hasPgn });
@@ -439,13 +439,22 @@ async function runCronLogic(env, storage) {
         // Place each round's PGNs, drop the pairings rows they supersede, and
         // keep what still needs writing.
         const writesByRound = new Map();
+        // The section each pair's game was paired in, for a PGN whose Event
+        // names none: MI's live DGT boards export "Winter Tuesday Night
+        // Marathon 2026" with no ": 2000+" (Winter 2026 R4, boards 1-8). The
+        // posted pairings are the latest word, then what is stored.
+        const pairedSection = new Map();
+        for (const [round, rows] of storedByRound) for (const r of rows) if (r.section) pairedSection.set(`${round}:${r.key}`, r.section);
+        for (const p of posted) pairedSection.set(`${p.rnd}:${p.key}`, normalizeSection(p.section));
         for (const [roundNum, games] of Object.entries(parsed.fullGames)) {
             const round = parseInt(roundNum, 10);
             const stored = storedByRound.get(round) || [];
             const pgns = games.map(g => {
                 const w = canonicalize(g.white);
                 const b = canonicalize(g.black);
-                return { g, w, b, key: pairKey(w.norm, b.norm), board: g.board, extra: isExtraRated(g.section) };
+                const key = pairKey(w.norm, b.norm);
+                const section = normalizeSection(g.section) || pairedSection.get(`${round}:${key}`) || null;
+                return { g, w, b, key, section, board: g.board, extra: isExtraRated(section) };
             }).sort((x, y) => x.extra - y.extra);
             const boards = assignBoards([...stored, ...posted.filter(p => p.rnd === round)], pgns);
             const roundWrites = [];
@@ -479,7 +488,7 @@ async function runCronLogic(env, storage) {
             // Use this instead of the PGN [Date] header so the games.date column
             // stays in one consistent format for sortable lex comparison.
             const canonicalDate = tournament.roundDates?.[round - 1] || null;
-            for (const { g, w, b, board, ex, rowKey } of roundWrites) {
+            for (const { g, w, b, section, board, ex, rowKey } of roundWrites) {
                 if (g.gameId && !gameIds.get(rowKey)) {
                     console.warn(`GameId ${g.gameId} collides with another game; storing ${rowKey} without it.`);
                 }
@@ -499,7 +508,8 @@ async function runCronLogic(env, storage) {
                           white_norm=excluded.white_norm, black_norm=excluded.black_norm,
                           white_elo=excluded.white_elo, black_elo=excluded.black_elo,
                           result=excluded.result, eco=excluded.eco, opening_name=excluded.opening_name,
-                          section=excluded.section, date=excluded.date, game_id=excluded.game_id, pgn=excluded.pgn`
+                          section=COALESCE(excluded.section, games.section), date=excluded.date,
+                          game_id=excluded.game_id, pgn=excluded.pgn`
                     ).bind(
                         slug, round, board,
                         whiteName, blackName,
@@ -509,7 +519,7 @@ async function runCronLogic(env, storage) {
                         g.result,
                         opening ? opening.eco : g.eco,
                         opening ? opening.name : null,
-                        normalizeSection(g.section), canonicalDate, gameIds.get(rowKey), g.pgn
+                        section, canonicalDate, gameIds.get(rowKey), g.pgn
                     )
                 );
                 if (ex) updatedCount++;
